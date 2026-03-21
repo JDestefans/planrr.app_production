@@ -2653,7 +2653,7 @@ function AccreditationView({ data, updateData }) {
     [updateData]
   );
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 820 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 960 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -4060,7 +4060,7 @@ function ExerciseManager({ data, setData }) {
     ? data.exercises.find((e) => e.id === selectedId)
     : null;
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1000 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1000 }}>
       <div
         style={{
           display: 'flex',
@@ -5418,7 +5418,7 @@ function EmployeesView({ data, setData }) {
   );
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1000 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1000 }}>
       <div
         style={{
           display: 'flex',
@@ -5875,7 +5875,7 @@ function TrainingManager({ data, setData }) {
       t.type.toLowerCase().includes(search.toLowerCase())
   );
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 980 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 980 }}>
       <div
         style={{
           display: 'flex',
@@ -6241,7 +6241,7 @@ function PartnerRegistry({ data, setData }) {
     return data.partners;
   }, [data.partners, filter]);
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 960 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 960 }}>
       <div
         style={{
           display: 'flex',
@@ -6690,7 +6690,7 @@ function PlanLibrary({ data, setData }) {
       plans: prev.plans.filter((p) => p.id !== id),
     }));
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 940 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 940 }}>
       <div
         style={{
           display: 'flex',
@@ -7082,7 +7082,7 @@ function ResourcesView({ data, setData }) {
       ? B.amber
       : B.red;
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 960 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 960 }}>
       <div
         style={{
           display: 'flex',
@@ -7729,7 +7729,7 @@ function ProgramCalendar({ data }) {
     .slice(-8)
     .reverse();
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 900 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1040 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -7995,7 +7995,7 @@ function ReportsView({ data, orgName }) {
   };
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 900 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1040 }}>
       {/* ── Screen: topbar ── */}
       <div
         style={{
@@ -8504,7 +8504,7 @@ function AiAssistantView({ data, orgName }) {
     'What credentials does an EM director need?',
   ];
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 760 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 760 }}>
       <div
         style={{
           marginBottom: 20,
@@ -9485,7 +9485,7 @@ function GrantTracker({ data, setData }) {
     closeout: grants.filter((g) => g.status === 'closeout').length,
   };
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1000 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1000 }}>
       <div
         style={{
           display: 'flex',
@@ -10193,7 +10193,7 @@ function ThiraView({ data, setData }) {
   ];
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 960 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 960 }}>
       <div
         style={{
           display: 'flex',
@@ -11300,7 +11300,7 @@ function CapDashboard({ data, setData }) {
     return allCAs;
   }, [allCAs, filter]);
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 960 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 960 }}>
       <div
         style={{
           display: 'flex',
@@ -11778,7 +11778,7 @@ function ActivityLogView({ data, setData }) {
     completed: '✓',
   };
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 760 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 760 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -11979,7 +11979,7 @@ function SettingsView({ data, updateData }) {
   const overall = overallStats(data.standards || {});
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 860 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 860 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -12602,7 +12602,7 @@ function SettingsView({ data, updateData }) {
             <div
               style={{
                 background: previewAccent,
-                padding: '28px 32px',
+                padding: '28px clamp(24px,3vw,48px)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -13181,7 +13181,7 @@ function Dashboard({ data, setView, orgName }) {
   ];
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1120 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1120 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -13985,7 +13985,7 @@ function BulkIntake({ data, updateData }) {
     ...new Set(results.flatMap((r) => r.mappings.map((m) => m.stdId))),
   ];
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 900 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1040 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -15195,7 +15195,7 @@ function PackageBuilder({ data, setView }) {
   ];
   const accent = data.brand?.accentColor || B.teal;
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 880 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1020 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -16176,7 +16176,7 @@ function AccreditationJourney({ data, updateData, setView }) {
   const [expandedStep, setExpandedStep] = useState(activeStep);
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 900 }}>
+    <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1040 }}>
       <div style={{ marginBottom: 22 }}>
         <h1
           style={{
@@ -16904,8 +16904,7 @@ function LandingPage({ onLogin, onSignup }) {
           }}
         >
           planrr.app is the all-in-one platform for emergency management
-          programs that need to operate at a high standard — not just when an
-          assessor is coming, but 365 days a year.
+          programs that need to operate at a high standard 365 days a year.
         </p>
         <p
           style={{
@@ -16979,7 +16978,7 @@ function LandingPage({ onLogin, onSignup }) {
           <div
             key={l}
             style={{
-              padding: '28px 32px',
+              padding: '28px clamp(24px,3vw,48px)',
               borderRight: '1px solid rgba(194,150,74,0.12)',
             }}
           >
@@ -18308,7 +18307,7 @@ export default function App() {
       }
       setLoaded(true);
     });
-  }, []);
+  }, [authed]);
   const updateData = useCallback((updater) => {
     setData((prev) => {
       const next =
@@ -18367,8 +18366,8 @@ export default function App() {
           >
             <AuthScreen
               onAuth={() => {
-                setAuthed(true);
                 setLoaded(false);
+                setAuthed(true);
                 setAuthMode(null);
               }}
               initialMode={authMode}
@@ -18433,7 +18432,14 @@ export default function App() {
       </div>
       <div
         id="planrr-main"
-        style={{ marginLeft: 244, flex: 1, minHeight: '100vh' }}
+        style={{
+          marginLeft: 244,
+          flex: 1,
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        }}
       >
         <div
           id="planrr-topbar"
@@ -18625,7 +18631,15 @@ export default function App() {
             Sign out
           </button>
         </div>
-        <div style={{ animation: 'fadeUp 0.3s ease' }}>
+        <div
+          style={{
+            animation: 'fadeUp 0.3s ease',
+            maxWidth: 1400,
+            width: '100%',
+            alignSelf: 'center',
+            flex: 1,
+          }}
+        >
           {view === 'journey' && (
             <AccreditationJourney
               data={data}
