@@ -634,7 +634,7 @@ const DEP_LABELS = {
 
 async function callAI(system, prompt, onChunk, operation) {
   const res = await fetch(
-    'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/super-endpoint',
+    'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/ai-proxy',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -698,7 +698,7 @@ async function callAIWithDoc(system, textBefore, fileData, onChunk) {
       });
   }
   const res = await fetch(
-    'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/super-endpoint',
+    'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/ai-proxy',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3299,9 +3299,11 @@ function ExerciseDetail({ ex, onUpdate, onClose }) {
                 style={{
                   padding: '6px 12px',
                   borderRadius: '6px 6px 0 0',
-                  border: `1px solid ${tab === t.id ? B.border : 'tranSPRent'}`,
+                  border: `1px solid ${
+                    tab === t.id ? B.border : 'transparent'
+                  }`,
                   borderBottom: `1px solid ${tab === t.id ? B.card : B.border}`,
-                  background: tab === t.id ? B.card : 'tranSPRent',
+                  background: tab === t.id ? B.card : 'transparent',
                   color: tab === t.id ? B.teal : B.muted,
                   fontSize: 12,
                   fontWeight: tab === t.id ? 700 : 500,
@@ -4561,9 +4563,11 @@ function EmployeeDetail({ emp, onUpdate, onClose }) {
                 style={{
                   padding: '6px 12px',
                   borderRadius: '6px 6px 0 0',
-                  border: `1px solid ${tab === t.id ? B.border : 'tranSPRent'}`,
+                  border: `1px solid ${
+                    tab === t.id ? B.border : 'transparent'
+                  }`,
                   borderBottom: `1px solid ${tab === t.id ? B.card : B.border}`,
-                  background: tab === t.id ? B.card : 'tranSPRent',
+                  background: tab === t.id ? B.card : 'transparent',
                   color: tab === t.id ? B.indigo : B.muted,
                   fontSize: 12,
                   fontWeight: tab === t.id ? 700 : 500,
@@ -7336,7 +7340,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
         { id: 'intake', icon: '⊙', label: 'Bulk Doc Intake', highlight: true },
         { id: 'package', icon: '◧', label: 'Package Builder', highlight: true },
         { id: 'thira', icon: '◈', label: 'THIRA/SPR' },
-        { id: 'cap', icon: '⚠', label: 'Corrective Actions' },
+        { id: 'cap', icon: '◎', label: 'Corrective Actions' },
         { id: 'reports', icon: '◧', label: 'Reports' },
       ],
     },
@@ -7550,7 +7554,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
                   background:
                     view === item.id ? 'rgba(27,201,196,0.12)' : 'none',
                   border: `1px solid ${
-                    view === item.id ? 'rgba(27,201,196,0.3)' : 'tranSPRent'
+                    view === item.id ? 'rgba(27,201,196,0.3)' : 'transparent'
                   }`,
                   color:
                     view === item.id
@@ -8887,9 +8891,11 @@ function GrantDetail({ grant, onUpdate, onClose }) {
                 style={{
                   padding: '6px 12px',
                   borderRadius: '6px 6px 0 0',
-                  border: `1px solid ${tab === t.id ? B.border : 'tranSPRent'}`,
+                  border: `1px solid ${
+                    tab === t.id ? B.border : 'transparent'
+                  }`,
                   borderBottom: `1px solid ${tab === t.id ? B.card : B.border}`,
-                  background: tab === t.id ? B.card : 'tranSPRent',
+                  background: tab === t.id ? B.card : 'transparent',
                   color: tab === t.id ? B.green : B.muted,
                   fontSize: 12,
                   fontWeight: tab === t.id ? 700 : 500,
@@ -10064,7 +10070,7 @@ function ThiraView({ data, setData }) {
       }
 
       const res = await fetch(
-        'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/super-endpoint',
+        'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/ai-proxy',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -10127,7 +10133,7 @@ function ThiraView({ data, setData }) {
   };
 
   // Generate a full THIRA/SPR document
-  const generateSPR = async () => {
+  const generateSpar = async () => {
     setGenLoad(true);
     setGenDoc('');
     const hazList = (thira.hazards || [])
@@ -10170,7 +10176,7 @@ function ThiraView({ data, setData }) {
     setGenLoad(false);
   };
 
-  const downloadSPR = () => {
+  const downloadSpar = () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([genDoc], { type: 'text/plain' }));
     a.download = `${data.orgName || 'planrr'}-SPR-THIRA-${today()}.txt`;
@@ -10244,9 +10250,9 @@ function ThiraView({ data, setData }) {
             style={{
               padding: '7px 16px',
               borderRadius: '7px 7px 0 0',
-              border: `1px solid ${tab === t.id ? B.border : 'tranSPRent'}`,
+              border: `1px solid ${tab === t.id ? B.border : 'transparent'}`,
               borderBottom: `1px solid ${tab === t.id ? B.card : B.border}`,
-              background: tab === t.id ? B.card : 'tranSPRent',
+              background: tab === t.id ? B.card : 'transparent',
               color: tab === t.id ? B.blue : B.muted,
               fontSize: 12,
               fontWeight: tab === t.id ? 700 : 500,
@@ -11020,7 +11026,7 @@ function ThiraView({ data, setData }) {
             }}
           >
             <button
-              onClick={generateSPR}
+              onClick={generateSpar}
               disabled={genLoad}
               style={{
                 background: B.purple,
@@ -11044,10 +11050,10 @@ function ThiraView({ data, setData }) {
                 : 'Generate THIRA/SPR Document'}
             </button>
             {genDoc && !genLoad && (
-              <Btn label="↓ Download .txt" onClick={downloadSPR} />
+              <Btn label="↓ Download .txt" onClick={downloadSpar} />
             )}
             {genDoc && !genLoad && (
-              <Btn label="Regenerate" onClick={generateSPR} />
+              <Btn label="Regenerate" onClick={generateSpar} />
             )}
           </div>
           {genLoad && (
@@ -11117,7 +11123,7 @@ function ThiraView({ data, setData }) {
                   {data.orgName || 'Your Organization'} — THIRA/SPR Document
                 </div>
                 <div style={{ display: 'flex', gap: 7 }}>
-                  <Btn label="↓ Download .txt" onClick={downloadSPR} small />
+                  <Btn label="↓ Download .txt" onClick={downloadSpar} small />
                   <button
                     onClick={() => {
                       navigator.clipboard?.writeText(genDoc);
@@ -12008,12 +12014,12 @@ function SettingsView({ data, updateData }) {
               padding: '8px 16px',
               borderRadius: '8px 8px 0 0',
               border: `1px solid ${
-                activeTab === t.id ? B.border : 'tranSPRent'
+                activeTab === t.id ? B.border : 'transparent'
               }`,
               borderBottom: `1px solid ${
                 activeTab === t.id ? B.card : B.border
               }`,
-              background: activeTab === t.id ? B.card : 'tranSPRent',
+              background: activeTab === t.id ? B.card : 'transparent',
               color: activeTab === t.id ? B.teal : B.muted,
               fontSize: 13,
               fontWeight: activeTab === t.id ? 700 : 500,
@@ -12181,7 +12187,7 @@ function SettingsView({ data, updateData }) {
             </div>
             <div style={{ fontSize: 12, color: B.faint, marginBottom: 14 }}>
               Appears top-left on all PDF exports and printed reports.
-              Recommended: PNG or SVG, tranSPRent background, at least 200px
+              Recommended: PNG or SVG, transparent background, at least 200px
               wide.
             </div>
             <div
@@ -12371,7 +12377,7 @@ function SettingsView({ data, updateData }) {
                     borderRadius: 8,
                     background: c,
                     border: `2px solid ${
-                      brand.accentColor === c ? '#111' : 'tranSPRent'
+                      brand.accentColor === c ? '#111' : 'transparent'
                     }`,
                     cursor: 'pointer',
                     boxShadow:
@@ -13474,7 +13480,7 @@ function Dashboard({ data, setView, orgName }) {
                   (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')
                 }
                 onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'tranSPRent')
+                  (e.currentTarget.style.background = 'transparent')
                 }
               >
                 <span
@@ -13887,7 +13893,7 @@ function BulkIntake({ data, updateData }) {
           });
         }
         const res = await fetch(
-          'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/super-endpoint',
+          'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/ai-proxy',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -14760,7 +14766,7 @@ function GlobalSearch({ data, setView, onClose }) {
                 outline: 'none',
                 fontSize: 14,
                 color: B.text,
-                background: 'tranSPRent',
+                background: 'transparent',
                 fontFamily: "'DM Sans',sans-serif",
               }}
             />
@@ -15225,7 +15231,7 @@ function PackageBuilder({ data, setView }) {
               flex: 1,
               padding: '10px 6px',
               background:
-                step === i ? accent : step > i ? `${accent}18` : 'tranSPRent',
+                step === i ? accent : step > i ? `${accent}18` : 'transparent',
               border: 'none',
               borderRight:
                 i < steps.length - 1 ? `1px solid ${B.border}` : 'none',
@@ -16744,6 +16750,700 @@ function AccreditationJourney({ data, updateData, setView }) {
 /* ═══════════════════════════════════════════════════════
    ONBOARDING
 ═══════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════
+   LANDING PAGE — home screen at planrr.app
+   Matches marketing one-pager theme exactly
+═══════════════════════════════════════════════════════ */
+function LandingPage({ onLogin, onSignup }) {
+  return (
+    <div
+      style={{
+        fontFamily: 'DM Sans,sans-serif',
+        background: '#080f1e',
+        minHeight: '100vh',
+        color: '#f0f4fa',
+        backgroundImage:
+          'linear-gradient(rgba(194,150,74,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(194,150,74,0.03) 1px,transparent 1px)',
+        backgroundSize: '52px 52px',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          borderBottom: '1px solid rgba(194,150,74,0.22)',
+          padding: '14px 40px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'rgba(8,15,30,0.92)',
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            style={{
+              fontFamily: 'Syne,DM Sans,sans-serif',
+              fontSize: 20,
+              fontWeight: 800,
+              letterSpacing: '-0.5px',
+            }}
+          >
+            <span style={{ color: '#f0f4fa' }}>planrr</span>
+            <span style={{ color: GOLD }}>.app</span>
+          </div>
+          <div
+            style={{
+              fontFamily: 'DM Mono,monospace',
+              fontSize: 9,
+              color: '#475569',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              marginLeft: 6,
+            }}
+          >
+            Early Access
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div
+            style={{
+              fontFamily: 'DM Mono,monospace',
+              fontSize: 10,
+              color: GOLD,
+              border: '1px solid rgba(194,150,74,0.22)',
+              padding: '4px 12px',
+              borderRadius: 2,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+            }}
+          >
+            EMAP EMS 5-2022
+          </div>
+          <button
+            onClick={onLogin}
+            style={{
+              background: 'none',
+              color: '#94a3b8',
+              border: '1px solid #1e3a5f',
+              borderRadius: 6,
+              padding: '8px 18px',
+              fontSize: 13,
+              cursor: 'pointer',
+              fontFamily: 'DM Sans,sans-serif',
+            }}
+          >
+            Sign In
+          </button>
+          <button
+            onClick={onSignup}
+            style={{
+              background: GOLD,
+              color: '#080f1e',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'DM Sans,sans-serif',
+            }}
+          >
+            Get Started
+          </button>
+        </div>
+      </div>
+
+      {/* Hero */}
+      <div
+        style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px 72px' }}
+      >
+        <div
+          style={{
+            fontFamily: 'DM Mono,monospace',
+            fontSize: 11,
+            color: GOLD,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            marginBottom: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <div style={{ width: 28, height: 1, background: GOLD }} />
+          Emergency Management Platform
+        </div>
+        <h1
+          style={{
+            fontFamily: 'Syne,DM Sans,sans-serif',
+            fontSize: 'clamp(38px,5vw,64px)',
+            fontWeight: 800,
+            lineHeight: 1.06,
+            letterSpacing: '-2px',
+            marginBottom: 22,
+          }}
+        >
+          Your EM program.
+          <br />
+          Running at full strength.
+          <br />
+          <span style={{ color: GOLD }}>Every single day.</span>
+        </h1>
+        <p
+          style={{
+            fontSize: 17,
+            color: '#94a3b8',
+            maxWidth: 560,
+            lineHeight: 1.75,
+            marginBottom: 14,
+            fontWeight: 300,
+          }}
+        >
+          planrr.app is the all-in-one platform for emergency management
+          programs that need to operate at a high standard — not just when an
+          assessor is coming, but 365 days a year.
+        </p>
+        <p
+          style={{
+            fontFamily: 'DM Mono,monospace',
+            fontSize: 11,
+            color: '#475569',
+            maxWidth: 560,
+            lineHeight: 1.7,
+            marginBottom: 40,
+            borderLeft: '2px solid rgba(194,150,74,0.22)',
+            paddingLeft: 14,
+          }}
+        >
+          Over 50% of local EM agencies have one or fewer full-time permanent
+          staff. planrr.app was built for them.
+        </p>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <button
+            onClick={onSignup}
+            style={{
+              background: GOLD,
+              color: '#080f1e',
+              border: 'none',
+              padding: '13px 28px',
+              fontFamily: 'Syne,DM Sans,sans-serif',
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              borderRadius: 4,
+            }}
+          >
+            Request Early Access
+          </button>
+          <button
+            onClick={onLogin}
+            style={{
+              border: '1px solid rgba(194,150,74,0.22)',
+              color: GOLD,
+              background: 'none',
+              padding: '12px 24px',
+              fontFamily: 'DM Mono,monospace',
+              fontSize: 12,
+              letterSpacing: '0.08em',
+              cursor: 'pointer',
+              borderRadius: 4,
+            }}
+          >
+            Sign In to Your Program
+          </button>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      <div
+        style={{
+          borderTop: '1px solid rgba(194,150,74,0.22)',
+          borderBottom: '1px solid rgba(194,150,74,0.22)',
+          background: 'rgba(13,24,41,0.85)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4,1fr)',
+        }}
+      >
+        {[
+          ['73', 'EMAP Standards Tracked'],
+          ['64', 'FEMA Core Capabilities'],
+          ['6', 'Step Accreditation Journey'],
+          ['100%', 'AI-Powered Guidance'],
+        ].map(([n, l]) => (
+          <div
+            key={l}
+            style={{
+              padding: '28px 32px',
+              borderRight: '1px solid rgba(194,150,74,0.12)',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'Syne,DM Sans,sans-serif',
+                fontSize: 36,
+                fontWeight: 800,
+                color: GOLD,
+                lineHeight: 1,
+                marginBottom: 6,
+              }}
+            >
+              {n}
+            </div>
+            <div
+              style={{
+                fontFamily: 'DM Mono,monospace',
+                fontSize: 10,
+                color: '#475569',
+                letterSpacing: '0.13em',
+                textTransform: 'uppercase',
+                lineHeight: 1.5,
+              }}
+            >
+              {l}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Features */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
+        <div
+          style={{
+            fontFamily: 'DM Mono,monospace',
+            fontSize: 10,
+            color: GOLD,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            marginBottom: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <div style={{ width: 20, height: 1, background: GOLD }} />
+          The Platform
+        </div>
+        <h2
+          style={{
+            fontFamily: 'Syne,DM Sans,sans-serif',
+            fontSize: 'clamp(24px,3vw,36px)',
+            fontWeight: 700,
+            letterSpacing: '-1px',
+            marginBottom: 12,
+          }}
+        >
+          Everything your program needs.
+          <br />
+          <span style={{ color: GOLD }}>One place.</span>
+        </h2>
+        <p
+          style={{
+            color: '#94a3b8',
+            fontSize: 15,
+            fontWeight: 300,
+            maxWidth: 560,
+            lineHeight: 1.75,
+            marginBottom: 48,
+          }}
+        >
+          Built around EMAP EMS 5-2022, HSEEP, and CPG 201. Every module talks
+          to every other module. Your compliance picture builds automatically as
+          you work.
+        </p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3,1fr)',
+            gap: 2,
+          }}
+        >
+          {[
+            [
+              'EMAP Standards',
+              'Track all 73 EMS 5-2022 standards. Upload evidence, write rationale, get AI interpretation. Your compliance picture updates in real time.',
+              'Accreditation Core',
+            ],
+            [
+              'Bulk Document Intake',
+              'Drop your existing EOP, COOP, and AARs. AI reads each one and maps it to the correct EMAP standards automatically.',
+              'AI-Powered',
+            ],
+            [
+              'Exercises & AARs',
+              'Full HSEEP workflow with AI-generated After-Action Reports. Corrective actions auto-populate your CAP dashboard.',
+              'HSEEP Aligned',
+            ],
+            [
+              'SPAR / THIRA',
+              'Import your existing THIRA document — AI extracts every hazard. Or generate a full CPG 201-compliant SPR document from scratch.',
+              'EMAP 4.1',
+            ],
+            [
+              'Accreditation Journey',
+              '6-step process tracker with real deadlines, fee estimates, and checklists built from the EMAP Applicant Guide.',
+              'October 2025',
+            ],
+            [
+              'Grant Tracker',
+              'Track EMPG, UASI, HMGP and all active grants. Deliverable alerts surface automatically before deadlines are missed.',
+              'EMAP 3.4',
+            ],
+          ].map(([t, d, tag]) => (
+            <div
+              key={t}
+              style={{
+                background: '#0d1829',
+                border: '1px solid #1a2d47',
+                padding: '28px 24px',
+                transition: 'all 0.2s',
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: 'Syne,DM Sans,sans-serif',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  marginBottom: 8,
+                }}
+              >
+                {t}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: '#94a3b8',
+                  lineHeight: 1.65,
+                  marginBottom: 14,
+                  fontWeight: 300,
+                }}
+              >
+                {d}
+              </div>
+              <div
+                style={{
+                  fontFamily: 'DM Mono,monospace',
+                  fontSize: 9,
+                  color: GOLD,
+                  border: '1px solid rgba(194,150,74,0.22)',
+                  padding: '2px 8px',
+                  display: 'inline-block',
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {tag}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pricing */}
+      <div
+        style={{
+          borderTop: '1px solid #1a2d47',
+          borderBottom: '1px solid #1a2d47',
+          background: 'rgba(13,24,41,0.85)',
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
+          <div
+            style={{
+              fontFamily: 'DM Mono,monospace',
+              fontSize: 10,
+              color: GOLD,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              marginBottom: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
+            <div style={{ width: 20, height: 1, background: GOLD }} />
+            Pricing
+          </div>
+          <h2
+            style={{
+              fontFamily: 'Syne,DM Sans,sans-serif',
+              fontSize: 'clamp(24px,3vw,36px)',
+              fontWeight: 700,
+              letterSpacing: '-1px',
+              marginBottom: 12,
+            }}
+          >
+            Simple pricing.
+            <br />
+            <span style={{ color: GOLD }}>Everything included.</span>
+          </h2>
+          <p
+            style={{
+              color: '#94a3b8',
+              fontSize: 15,
+              fontWeight: 300,
+              maxWidth: 500,
+              lineHeight: 1.75,
+              marginBottom: 48,
+            }}
+          >
+            No tiers, no feature gating. One price gets you the full platform —
+            every module, every AI feature, unlimited use.
+          </p>
+          <div
+            style={{
+              maxWidth: 440,
+              background: '#080f1e',
+              border: '1px solid rgba(194,150,74,0.4)',
+              borderRadius: 8,
+              padding: '36px 40px',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'DM Mono,monospace',
+                fontSize: 10,
+                color: GOLD,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                marginBottom: 16,
+              }}
+            >
+              Full Platform Access
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 6,
+                marginBottom: 6,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'Syne,DM Sans,sans-serif',
+                  fontSize: 52,
+                  fontWeight: 800,
+                  color: '#f0f4fa',
+                  lineHeight: 1,
+                }}
+              >
+                $149
+              </span>
+              <span style={{ color: '#475569', fontSize: 14 }}>
+                /month per program
+              </span>
+            </div>
+            <div
+              style={{
+                fontFamily: 'DM Mono,monospace',
+                fontSize: 10,
+                color: '#475569',
+                marginBottom: 28,
+              }}
+            >
+              Billed monthly. Cancel anytime.
+            </div>
+            {[
+              'All 73 EMAP EMS 5-2022 standards',
+              'Full AI suite — AAR drafting, THIRA analysis, rationale generation',
+              'Bulk document intake and auto-mapping',
+              'Accreditation Journey tracker with fee estimates',
+              'Grant tracker, exercise manager, personnel credentialing',
+              'Unlimited evidence uploads and document storage',
+              'Priority support for accreditation questions',
+            ].map((f) => (
+              <div
+                key={f}
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'flex-start',
+                  marginBottom: 10,
+                  fontSize: 13,
+                  color: '#94a3b8',
+                }}
+              >
+                <span style={{ color: GOLD, flexShrink: 0, marginTop: 1 }}>
+                  +
+                </span>
+                {f}
+              </div>
+            ))}
+            <button
+              onClick={onSignup}
+              style={{
+                width: '100%',
+                marginTop: 24,
+                background: GOLD,
+                color: '#080f1e',
+                border: 'none',
+                padding: '13px',
+                fontFamily: 'Syne,DM Sans,sans-serif',
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: 4,
+              }}
+            >
+              Start Free Trial
+            </button>
+            <div
+              style={{
+                fontFamily: 'DM Mono,monospace',
+                fontSize: 10,
+                color: '#475569',
+                textAlign: 'center',
+                marginTop: 12,
+                letterSpacing: '0.08em',
+              }}
+            >
+              14-day free trial. No credit card required.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div
+        style={{
+          background: '#0d1829',
+          borderTop: '1px solid rgba(194,150,74,0.22)',
+          borderBottom: '1px solid rgba(194,150,74,0.22)',
+          padding: '64px 40px',
+          textAlign: 'center',
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: 'Syne,DM Sans,sans-serif',
+            fontSize: 'clamp(26px,4vw,42px)',
+            fontWeight: 800,
+            letterSpacing: '-1.5px',
+            marginBottom: 14,
+          }}
+        >
+          Your program deserves better
+          <br />
+          than a <span style={{ color: GOLD }}>spreadsheet.</span>
+        </h2>
+        <p
+          style={{
+            color: '#94a3b8',
+            fontSize: 15,
+            fontWeight: 300,
+            marginBottom: 32,
+            maxWidth: 480,
+            margin: '0 auto 32px',
+            lineHeight: 1.7,
+          }}
+        >
+          planrr.app is in early access. Join the founding cohort and be among
+          the first EM programs to bring real structure and daily readiness to
+          how they operate.
+        </p>
+        <div
+          style={{
+            display: 'flex',
+            gap: 14,
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            onClick={onSignup}
+            style={{
+              background: GOLD,
+              color: '#080f1e',
+              border: 'none',
+              padding: '13px 28px',
+              fontFamily: 'Syne,DM Sans,sans-serif',
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              borderRadius: 4,
+            }}
+          >
+            Join Early Access
+          </button>
+          <button
+            onClick={onLogin}
+            style={{
+              border: '1px solid rgba(194,150,74,0.22)',
+              color: GOLD,
+              background: 'none',
+              padding: '12px 24px',
+              fontFamily: 'DM Mono,monospace',
+              fontSize: 12,
+              letterSpacing: '0.08em',
+              cursor: 'pointer',
+              borderRadius: 4,
+            }}
+          >
+            Sign In
+          </button>
+        </div>
+        <div
+          style={{
+            fontFamily: 'DM Mono,monospace',
+            fontSize: 10,
+            color: '#475569',
+            letterSpacing: '0.1em',
+            marginTop: 18,
+          }}
+        >
+          Founding agency pricing. Locked for life. Direct input into the
+          product roadmap.
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          borderTop: '1px solid #1a2d47',
+          padding: '22px 40px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: 'Syne,DM Sans,sans-serif',
+            fontSize: 15,
+            fontWeight: 800,
+            letterSpacing: '-0.5px',
+          }}
+        >
+          <span style={{ color: '#f0f4fa' }}>planrr</span>
+          <span style={{ color: GOLD }}>.app</span>
+        </div>
+        <div
+          style={{
+            fontFamily: 'DM Mono,monospace',
+            fontSize: 10,
+            color: '#475569',
+            letterSpacing: '0.1em',
+          }}
+        >
+          Emergency Management Program Platform. EMAP EMS 5-2022 Aligned.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* AUTH */
 var SB_URL = 'https://ltnbvwnhtsaebyslbhil.supabase.co';
 var SB_KEY =
@@ -16812,8 +17512,8 @@ function isLoggedIn() {
   }
 }
 
-function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState('login');
+function AuthScreen({ onAuth, initialMode }) {
+  const [mode, setMode] = useState(initialMode || 'login');
   const [fe, setFe] = useState('');
   const [fp, setFp] = useState('');
   const [fp2, setFp2] = useState('');
@@ -16936,6 +17636,7 @@ function AuthScreen({ onAuth }) {
           padding: '36px 40px',
           width: 400,
           maxWidth: 'calc(100vw - 40px)',
+          position: 'relative',
         }}
       >
         <div style={{ marginBottom: 24 }}>
@@ -17296,10 +17997,10 @@ function FirstRunWelcome({ onDone, setView }) {
     },
     {
       t: 'Build your hazard profile',
-      b: 'Go to SPR/THIRA to profile your jurisdiction hazards. Drop in an existing THIRA and AI extracts every hazard automatically. Satisfies EMAP 4.1.',
+      b: 'Go to SPAR/THIRA to profile your jurisdiction hazards. Drop in an existing THIRA and AI extracts every hazard automatically. Satisfies EMAP 4.1.',
       a: 'Open planrr.app',
       lnk: 'thira',
-      ll: 'Open SPR/THIRA',
+      ll: 'Open SPAR/THIRA',
       last: true,
     },
   ];
@@ -17444,7 +18145,7 @@ function Onboarding({ onComplete }) {
           width: 400,
           height: 400,
           borderRadius: '50%',
-          background: `radial-gradient(circle,${B.teal}12,tranSPRent 70%)`,
+          background: `radial-gradient(circle,${B.teal}12,transparent 70%)`,
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
@@ -17574,7 +18275,10 @@ export default function App() {
   const [firstRun, setFirstRun] = useState(false);
   const saveTimer = useRef(null);
   useEffect(() => {
-    if (!authed) return;
+    if (!authed) {
+      setLoaded(true);
+      return;
+    }
     loadData().then((d) => {
       if (d) {
         const stds = {};
@@ -17642,7 +18346,37 @@ export default function App() {
     setFirstRun(true);
     saveData(d);
   }, []);
-  if (!authed) return <AuthScreen onAuth={() => setAuthed(true)} />;
+  const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
+  if (!authed)
+    return (
+      <>
+        <LandingPage
+          onLogin={() => setAuthMode('login')}
+          onSignup={() => setAuthMode('signup')}
+        />
+        {authMode && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 200,
+            }}
+          >
+            <AuthScreen
+              onAuth={() => {
+                setAuthed(true);
+                setLoaded(false);
+                setAuthMode(null);
+              }}
+              initialMode={authMode}
+            />
+          </div>
+        )}
+      </>
+    );
   if (!loaded)
     return (
       <div
@@ -17672,7 +18406,7 @@ export default function App() {
         </div>
       </div>
     );
-  if (onboarding) return <Onboarding onComplete={handleOnboard} />;
+  // onboarding handled in signup flow
   const notifications = buildNotifications(data);
   return (
     <div
