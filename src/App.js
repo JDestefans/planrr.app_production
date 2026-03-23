@@ -661,18 +661,52 @@ const DEP_LABELS = {
   '4.9.1': 'EMAP requires sections 4.4-4.9 before 4.11 can be peer-reviewed',
 };
 
+/* --- AI MODEL ROUTING --------------------------------
+   Routes tasks to appropriate model tiers to control cost:
+   - 'fast'   → cheaper model for simple tasks (summaries, short drafts, label lookups)
+   - 'strong' → capable model for complex reasoning (gap analysis, doc interpretation, multi-step)
+   getModelTier(operation) maps operation strings to tiers.
+   The tier is sent as `model_tier` in the request body so the
+   backend Edge Function can select the right vendor model.
+-------------------------------------------------------- */
+const MODEL_TIER_MAP = {
+  general: 'fast',
+  draft_rationale: 'fast',
+  draft_aar: 'fast',
+  exec_summary: 'fast',
+  training_needs: 'fast',
+  grant_guidance: 'fast',
+  interpret: 'strong',
+  evidence: 'strong',
+  action_plan: 'strong',
+  interpret_doc: 'strong',
+  bulk_intake: 'strong',
+  gap_analysis: 'strong',
+  finalize_aar: 'strong',
+  thira_analysis: 'strong',
+  spr_generation: 'strong',
+  template_gen: 'strong',
+};
+
+function getModelTier(operation) {
+  return MODEL_TIER_MAP[operation] || 'fast';
+}
+
 async function callAI(system, prompt, onChunk, operation) {
+  const op = operation || 'general';
+  const tier = getModelTier(op);
   const res = await fetch(
     'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/super-endpoint',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        operation: operation || 'general',
+        operation: op,
+        model_tier: tier,
         stream: true,
         system,
         prompt,
-        max_tokens: 1200,
+        max_tokens: tier === 'strong' ? 1600 : 1200,
       }),
     }
   );
@@ -726,6 +760,7 @@ async function callAIWithDoc(system, textBefore, fileData, onChunk) {
         text: `[Document: ${fileData.name}]\n${fileData.data}`,
       });
   }
+  const tier = getModelTier('interpret_doc');
   const res = await fetch(
     'https://ltnbvwnhtsaebyslbhil.supabase.co/functions/v1/super-endpoint',
     {
@@ -733,6 +768,7 @@ async function callAIWithDoc(system, textBefore, fileData, onChunk) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         operation: 'interpret_doc',
+        model_tier: tier,
         stream: true,
         system,
         content,
@@ -763,8 +799,139 @@ async function callAIWithDoc(system, textBefore, fileData, onChunk) {
   }
 }
 
+/* --- DOCUMENT → EMAP STANDARD MAPPING PIPELINE --------
+   Multi-stage pipeline for mapping uploaded documents to EMAP standards:
+   1. Chunk & summarize with fast model (cheaper)
+   2. Compute similarity against EMAP standard text to find candidates
+   3. Ask strong model on narrowed set for precise mapping + rationale
+   4. Cache results in localStorage keyed by content hash
+-------------------------------------------------------- */
+const DOC_MAPPING_CACHE_KEY = 'planrr_doc_mapping_cache';
+
+function getDocMappingCache() {
+  try {
+    return JSON.parse(localStorage.getItem(DOC_MAPPING_CACHE_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function setDocMappingCache(hash, result) {
+  const cache = getDocMappingCache();
+  cache[hash] = { result, ts: Date.now() };
+  const keys = Object.keys(cache);
+  if (keys.length > 50) {
+    const oldest = keys.sort((a, b) => cache[a].ts - cache[b].ts);
+    oldest.slice(0, keys.length - 50).forEach(k => delete cache[k]);
+  }
+  localStorage.setItem(DOC_MAPPING_CACHE_KEY, JSON.stringify(cache));
+}
+
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return 'dh_' + Math.abs(h).toString(36);
+}
+
+function textSimilarity(a, b) {
+  const wa = new Set(a.toLowerCase().split(/\W+/).filter(Boolean));
+  const wb = new Set(b.toLowerCase().split(/\W+/).filter(Boolean));
+  let overlap = 0;
+  wa.forEach(w => { if (wb.has(w)) overlap++; });
+  return overlap / Math.max(wa.size, wb.size, 1);
+}
+
+async function mapDocToEMAP(docText, allStandards, onStatus) {
+  const hash = simpleHash(docText.slice(0, 2000));
+  const cached = getDocMappingCache()[hash];
+  if (cached) {
+    if (onStatus) onStatus('Using cached mapping results');
+    return cached.result;
+  }
+  if (onStatus) onStatus('Step 1/3: Summarizing document...');
+  let summary = '';
+  await callAI(
+    'You are a document summarizer for emergency management. Extract key topics, capabilities, and compliance areas in 200 words max. No markdown.',
+    `Summarize this document for EMAP standard matching:\n\n${docText.slice(0, 8000)}`,
+    (chunk) => { summary += chunk; },
+    'general'
+  );
+  if (onStatus) onStatus('Step 2/3: Finding candidate standards...');
+  const scored = allStandards.map(s => ({
+    ...s,
+    score: textSimilarity(summary, `${s.id} ${s.title} ${s.description || ''}`)
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  const candidates = scored.slice(0, 10);
+  if (onStatus) onStatus('Step 3/3: AI matching to standards...');
+  const candidateText = candidates.map(c =>
+    `${c.id}: ${c.title}${c.description ? ' - ' + c.description : ''}`
+  ).join('\n');
+  let mappingResult = '';
+  await callAI(
+    'You are an EMAP EMS 5-2022 expert. Given a document summary and candidate standards, determine which standards this document maps to. Return a JSON array of objects with fields: standardId, confidence (high/medium/low), rationale (one sentence). Only include standards that genuinely apply.',
+    `Document summary:\n${summary}\n\nCandidate EMAP standards:\n${candidateText}\n\nReturn JSON array of matching standards with rationale.`,
+    (chunk) => { mappingResult += chunk; },
+    'gap_analysis'
+  );
+  let parsed;
+  try {
+    const jsonMatch = mappingResult.match(/\[[\s\S]*\]/);
+    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+  } catch {
+    parsed = [{ standardId: 'parse_error', confidence: 'low', rationale: mappingResult }];
+  }
+  const result = { summary, mappings: parsed, candidates: candidates.map(c => c.id) };
+  setDocMappingCache(hash, result);
+  return result;
+}
+
 const SYS =
   'You are an EMAP accreditation and emergency management expert in PLANRR - Plan Smartr. Deep expertise in EMAP EMS 5-2022, HSEEP, and EM program management. Be specific, practical, and concise. No markdown headers.';
+
+/* --- PLAN & QUOTA DEFINITIONS -------------------------
+   Per-org plan limits: seat caps and monthly AI call quotas.
+   Enforcement helpers check these limits before adding users
+   or making AI calls, prompting upgrade when exceeded.
+-------------------------------------------------------- */
+const PLAN_LIMITS = {
+  solo: { label: 'Solo Operator', seats: 1, aiCallsPerMonth: 200, price: 79 },
+  small_team: { label: 'Small Team', seats: 5, aiCallsPerMonth: 1000, price: 149 },
+  full_program: { label: 'Full Program', seats: Infinity, aiCallsPerMonth: 5000, price: 199 },
+  enterprise: { label: 'Enterprise', seats: Infinity, aiCallsPerMonth: Infinity, price: null },
+};
+
+function getPlanLimits(planId) {
+  return PLAN_LIMITS[planId] || PLAN_LIMITS.solo;
+}
+
+function checkSeatLimit(data) {
+  const plan = getPlanLimits(data.plan || 'solo');
+  const currentSeats = (data.employees || []).length + 1;
+  if (currentSeats >= plan.seats) {
+    return { allowed: false, message: `Your ${plan.label} plan supports up to ${plan.seats} seat${plan.seats > 1 ? 's' : ''}. Upgrade to add more team members.`, plan: plan.label };
+  }
+  return { allowed: true };
+}
+
+function checkAIQuota(data) {
+  const plan = getPlanLimits(data.plan || 'solo');
+  const used = data.aiCallsThisMonth || 0;
+  if (used >= plan.aiCallsPerMonth) {
+    return { allowed: false, message: `You've used all ${plan.aiCallsPerMonth} AI calls for this month on your ${plan.label} plan. Upgrade for higher limits.`, plan: plan.label };
+  }
+  return { allowed: true, remaining: plan.aiCallsPerMonth - used };
+}
+
+function incrementAIUsage(data, updateData) {
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  if (data.aiUsageMonth !== monthKey) {
+    updateData({ aiUsageMonth: monthKey, aiCallsThisMonth: 1 });
+  } else {
+    updateData({ aiCallsThisMonth: (data.aiCallsThisMonth || 0) + 1 });
+  }
+}
 
 /* --- FILE UTILS --------------------------------------- */
 function readFile(file) {
@@ -22126,8 +22293,10 @@ function LandingPage({ onLogin, onSignup }) {
         backgroundSize: '52px 52px',
       }}
     >
+      <style>{`@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
       {/* Header */}
       <div
+        className="planrr-landing-header"
         style={{
           position: 'sticky',
           top: 0,
@@ -22217,6 +22386,7 @@ function LandingPage({ onLogin, onSignup }) {
 
       {/* Hero */}
       <div
+        className="planrr-landing-hero"
         style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px 72px' }}
       >
         <div
@@ -22320,6 +22490,7 @@ function LandingPage({ onLogin, onSignup }) {
 
       {/* Stats strip */}
       <div
+        className="planrr-stats-strip"
         style={{
           borderTop: '1px solid rgba(194,150,74,0.22)',
           borderBottom: '1px solid rgba(194,150,74,0.22)',
@@ -22370,7 +22541,7 @@ function LandingPage({ onLogin, onSignup }) {
       </div>
 
       {/* Features */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
+      <div className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
         <div
           style={{
             fontFamily: 'DM Mono,monospace',
@@ -22415,6 +22586,7 @@ function LandingPage({ onLogin, onSignup }) {
           you work.
         </p>
         <div
+          className="planrr-features-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3,1fr)',
@@ -22525,7 +22697,7 @@ function LandingPage({ onLogin, onSignup }) {
           background: 'rgba(28,31,34,0.85)',
         }}
       >
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
+        <div className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
           <div
             style={{
               fontFamily: 'DM Mono,monospace',
@@ -22567,9 +22739,11 @@ function LandingPage({ onLogin, onSignup }) {
           >
             Every plan gets every feature - the full EM program in a box. We
             price by team size because understaffed shops deserve the same tools
-            as large agencies.
+            as large agencies. Each plan includes defined user seats and monthly
+            AI usage. Larger teams are expected to be on higher-tier plans.
           </p>
           <div
+            className="planrr-pricing-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4,1fr)',
@@ -22630,7 +22804,8 @@ function LandingPage({ onLogin, onSignup }) {
               </div>
               {[
                 'Full platform access',
-                'All AI features',
+                '1 user seat included',
+                '200 AI calls / month',
                 'Recovery planning module',
                 'Document templates',
                 'Evidence export',
@@ -22755,6 +22930,7 @@ function LandingPage({ onLogin, onSignup }) {
               {[
                 'Everything in Solo',
                 'Up to 5 user seats',
+                '1,000 AI calls / month',
                 'Mutual aid resource mapping',
                 'Bulk document intake',
                 'Priority support',
@@ -22859,6 +23035,7 @@ function LandingPage({ onLogin, onSignup }) {
               {[
                 'Everything in Small Team',
                 'Unlimited user seats',
+                '5,000 AI calls / month',
                 'Advanced analytics',
                 'API access',
                 'Dedicated onboarding',
@@ -22960,6 +23137,7 @@ function LandingPage({ onLogin, onSignup }) {
               </div>
               {[
                 'Multi-organization dashboard',
+                'Unlimited seats & AI usage',
                 'Cross-jurisdiction reporting',
                 'Centralized admin console',
                 'Volume licensing',
@@ -23130,6 +23308,223 @@ function LandingPage({ onLogin, onSignup }) {
         >
           Founding agency pricing. Locked for life. Direct input into the
           product roadmap.
+        </div>
+      </div>
+
+      {/* Security & Compliance */}
+      <div
+        style={{
+          borderTop: '1px solid #2E3439',
+          background: 'rgba(28,31,34,0.85)',
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
+          <div
+            style={{
+              fontFamily: 'DM Mono,monospace',
+              fontSize: 10,
+              color: GOLD,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              marginBottom: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
+            <div style={{ width: 20, height: 1, background: GOLD }} />
+            Security & Compliance
+          </div>
+          <h2
+            style={{
+              fontFamily: 'Syne,DM Sans,sans-serif',
+              fontSize: 'clamp(24px,3vw,36px)',
+              fontWeight: 700,
+              letterSpacing: '-1px',
+              marginBottom: 12,
+            }}
+          >
+            Built for agencies that handle{' '}
+            <span style={{ color: GOLD }}>sensitive data.</span>
+          </h2>
+          <p
+            style={{
+              color: '#94a3b8',
+              fontSize: 15,
+              fontWeight: 300,
+              maxWidth: 560,
+              lineHeight: 1.75,
+              marginBottom: 48,
+            }}
+          >
+            Emergency management data demands serious protection. We treat
+            security as a first-class requirement, not an afterthought.
+          </p>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3,1fr)',
+              gap: 2,
+            }}
+            className="planrr-security-grid"
+          >
+            {[
+              ['HTTPS Everywhere', 'All data in transit is encrypted via TLS 1.2+. No exceptions.'],
+              ['Encryption at Rest', 'All stored data is encrypted at rest via cloud provider-managed keys (AES-256).'],
+              ['Authenticated Access', 'Every API call requires valid auth tokens. Org-scoped access ensures data isolation between agencies.'],
+              ['Activity Logs', 'Complete audit trail of user actions. Know who changed what, and when.'],
+              ['Automated Backups', 'Continuous database backups with point-in-time recovery. Your program data is never at risk.'],
+              ['Secure Infrastructure', 'Hosted on SOC 2-certified cloud infrastructure with network isolation, DDoS protection, and 24/7 monitoring.'],
+            ].map(([t, d]) => (
+              <div
+                key={t}
+                style={{
+                  background: '#1C1F22',
+                  border: '1px solid #2E3439',
+                  padding: '28px 24px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'Syne,DM Sans,sans-serif',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    marginBottom: 8,
+                    color: '#f0f4fa',
+                  }}
+                >
+                  {t}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: '#94a3b8',
+                    lineHeight: 1.65,
+                    fontWeight: 300,
+                  }}
+                >
+                  {d}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* SOC 2 Roadmap */}
+          <div
+            style={{
+              marginTop: 56,
+              border: '1px solid rgba(194,150,74,0.22)',
+              borderRadius: 12,
+              padding: '32px 36px',
+              background: '#141719',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'DM Mono,monospace',
+                fontSize: 9,
+                color: GOLD,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                marginBottom: 14,
+              }}
+            >
+              SOC 2 Compliance Roadmap
+            </div>
+            <h3
+              style={{
+                fontFamily: 'Syne,DM Sans,sans-serif',
+                fontSize: 20,
+                fontWeight: 700,
+                marginBottom: 8,
+                color: '#f0f4fa',
+              }}
+            >
+              On the path to SOC 2 certification
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                color: '#94a3b8',
+                lineHeight: 1.7,
+                marginBottom: 28,
+                maxWidth: 560,
+              }}
+            >
+              We are actively pursuing SOC 2 compliance to meet the security
+              and trust requirements of government agencies.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {[
+                ['Q2 – Q3 2026', 'Policies, access control, and change management frameworks', true],
+                ['Q3 2026', 'Readiness assessment with independent auditor', true],
+                ['Q4 2026 – Q1 2027', 'SOC 2 Type I audit and certification', false],
+                ['Q3 2027', 'SOC 2 Type II audit and certification', false],
+              ].map(([q, desc, active], i) => (
+                <div
+                  key={q}
+                  style={{
+                    display: 'flex',
+                    gap: 16,
+                    alignItems: 'flex-start',
+                    position: 'relative',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      flexShrink: 0,
+                      width: 20,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        background: active ? GOLD : '#2E3439',
+                        border: active ? 'none' : '2px solid #475569',
+                        flexShrink: 0,
+                        marginTop: 4,
+                      }}
+                    />
+                    {i < 3 && (
+                      <div
+                        style={{
+                          width: 2,
+                          height: 32,
+                          background: '#2E3439',
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div style={{ paddingBottom: i < 3 ? 16 : 0 }}>
+                    <div
+                      style={{
+                        fontFamily: 'DM Mono,monospace',
+                        fontSize: 11,
+                        color: active ? GOLD : '#475569',
+                        fontWeight: 600,
+                        marginBottom: 2,
+                      }}
+                    >
+                      {q}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: '#94a3b8',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {desc}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -24802,6 +25197,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [authed, setAuthed] = useState(isLoggedIn());
   const [firstRun, setFirstRun] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const saveTimer = useRef(null);
   useEffect(() => {
     if (!authed) {
@@ -24830,7 +25226,7 @@ export default function App() {
         if (synced) loaded.standards = synced;
         setData(loaded);
         if (!d.orgName) setOnboarding(true);
-        else setFirstRun(true);
+        else if (!d.welcomeDismissed) setFirstRun(true);
       } else {
         const stds = {};
         ALL_STANDARDS.forEach((s) => {
@@ -24952,11 +25348,27 @@ export default function App() {
         fontFamily: "'DM Sans',sans-serif",
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800;9..40,900&family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:${B.bg};}::-webkit-scrollbar-thumb{background:#cdd6da;border-radius:3px;}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes typingDot{0%,60%,100%{transform:translateY(0);opacity:0.4}30%{transform:translateY(-3px);opacity:1}}@media print{#planrr-sidebar{display:none!important}#planrr-topbar{display:none!important}#planrr-main{margin-left:0!important}}`}</style>
-      <div id="planrr-sidebar">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800;9..40,900&family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:${B.bg};}::-webkit-scrollbar-thumb{background:#cdd6da;border-radius:3px;}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes typingDot{0%,60%,100%{transform:translateY(0);opacity:0.4}30%{transform:translateY(-3px);opacity:1}}@media print{#planrr-sidebar{display:none!important}#planrr-topbar{display:none!important}#planrr-main{margin-left:0!important}}@media(max-width:1024px){#planrr-sidebar{position:fixed!important;left:-260px!important;transition:left 0.25s ease!important;z-index:100!important}#planrr-sidebar.open{left:0!important}#planrr-main{margin-left:0!important}.planrr-menu-toggle{display:flex!important}.planrr-sidebar-overlay{display:block!important}}@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            zIndex: 99,
+            display: 'none',
+          }}
+          className="planrr-sidebar-overlay"
+        />
+      )}
+      <div id="planrr-sidebar" className={sidebarOpen ? 'open' : ''}>
         <Sidebar
           view={view}
-          setView={setView}
+          setView={(v) => { setView(v); setSidebarOpen(false); }}
           data={data}
           notifCount={notifications.length}
           orgName={data.orgName}
@@ -24993,6 +25405,25 @@ export default function App() {
             gap: 12,
           }}
         >
+          <button
+            className="planrr-menu-toggle"
+            onClick={() => setSidebarOpen((p) => !p)}
+            style={{
+              display: 'none',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 20,
+              color: B.text,
+              padding: 4,
+              marginRight: 4,
+            }}
+            aria-label="Toggle sidebar"
+          >
+            ☰
+          </button>
           <div
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}
           >
@@ -25257,7 +25688,10 @@ export default function App() {
         </div>
         {firstRun && !onboarding && (
           <FirstRunWelcome
-            onDone={() => setFirstRun(false)}
+            onDone={() => {
+              setFirstRun(false);
+              updateData({ welcomeDismissed: true });
+            }}
             setView={setView}
           />
         )}
