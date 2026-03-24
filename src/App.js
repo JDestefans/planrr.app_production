@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 
 /* --- ERROR BOUNDARY ----------------------------------- */
 class ErrorBoundary extends Component {
@@ -25337,8 +25338,14 @@ function FeedbackModal() {
 }
 
 function AppInner() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
-  const [view, setView] = useState('dashboard');
+  const pathView = location.pathname.replace(/^\/app\//, '').replace(/^\//, '') || 'dashboard';
+  const view = VIEW_TITLES[pathView] ? pathView : 'dashboard';
+  const setView = useCallback((v) => {
+    navigate('/app/' + v);
+  }, [navigate]);
   const [onboarding, setOnboarding] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -25453,6 +25460,7 @@ function AppInner() {
                 setLoaded(false);
                 setAuthed(true);
                 setAuthMode(null);
+                navigate('/app/dashboard');
               }}
               initialMode={authMode}
             />
@@ -25866,7 +25874,10 @@ function AppInner() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppInner />
+      <Routes>
+        <Route path="/app/*" element={<AppInner />} />
+        <Route path="/*" element={<AppInner />} />
+      </Routes>
     </ErrorBoundary>
   );
 }
