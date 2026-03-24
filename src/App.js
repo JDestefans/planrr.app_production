@@ -805,12 +805,11 @@ function getModelTier(operation) {
 async function callAI(system, prompt, onChunk, operation) {
   const op = operation || 'general';
   const tier = getModelTier(op);
-  const token = getAccessToken();
   const res = await fetch(
     SB_URL + '/functions/v1/ai-proxy',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (token || SB_KEY) },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SB_KEY },
       body: JSON.stringify({
         operation: op,
         model_tier: tier,
@@ -872,12 +871,11 @@ async function callAIWithDoc(system, textBefore, fileData, onChunk) {
       });
   }
   const tier = getModelTier('interpret_doc');
-  const token = getAccessToken();
   const res = await fetch(
     SB_URL + '/functions/v1/ai-proxy',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (token || SB_KEY) },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SB_KEY },
       body: JSON.stringify({
         operation: 'interpret_doc',
         model_tier: tier,
@@ -13607,12 +13605,11 @@ function ThiraView({ data, setData }) {
         });
       }
 
-      const aiToken = getAccessToken();
       const res = await fetch(
         SB_URL + '/functions/v1/ai-proxy',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (aiToken || SB_KEY) },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SB_KEY },
           body: JSON.stringify({
             operation: 'bulk_intake',
             model_tier: 'strong',
@@ -18156,12 +18153,11 @@ function BulkIntake({ data, updateData }) {
             text: `Document:\n${fd.data}\n\n${prompt}`,
           });
         }
-        const aiToken = getAccessToken();
         const res = await fetch(
           SB_URL + '/functions/v1/ai-proxy',
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (aiToken || SB_KEY) },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SB_KEY },
             body: JSON.stringify({
               operation: 'bulk_intake',
               model_tier: 'strong',
@@ -25684,7 +25680,7 @@ function AppInner() {
         fontFamily: "'DM Sans',sans-serif",
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800;9..40,900&family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}:focus-visible{outline:2px solid #1BC9C4;outline-offset:2px;border-radius:4px}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:${B.bg};}::-webkit-scrollbar-thumb{background:#cdd6da;border-radius:3px;}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes typingDot{0%,60%,100%{transform:translateY(0);opacity:0.4}30%{transform:translateY(-3px);opacity:1}}@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@media print{#planrr-sidebar{display:none!important}#planrr-topbar{display:none!important}#planrr-main{margin-left:0!important}}@media(max-width:1024px){#planrr-sidebar{position:fixed!important;left:-260px!important;transition:left 0.25s ease!important;z-index:100!important}#planrr-sidebar.open{left:0!important}#planrr-main{margin-left:0!important}.planrr-menu-toggle{display:flex!important}.planrr-sidebar-overlay{display:block!important}}@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800;9..40,900&family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap');*{box-sizing:border-box;margin:0;padding:0;}:focus-visible{outline:2px solid #1BC9C4;outline-offset:2px;border-radius:4px}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:${B.bg};}::-webkit-scrollbar-thumb{background:#cdd6da;border-radius:3px;}#planrr-sidebar ::-webkit-scrollbar{width:4px;}#planrr-sidebar ::-webkit-scrollbar-track{background:transparent;}#planrr-sidebar ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px;}#planrr-sidebar ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2);}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes typingDot{0%,60%,100%{transform:translateY(0);opacity:0.4}30%{transform:translateY(-3px);opacity:1}}@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@media print{#planrr-sidebar{display:none!important}#planrr-topbar{display:none!important}#planrr-main{margin-left:0!important}}@media(max-width:1024px){#planrr-sidebar{position:fixed!important;left:-260px!important;transition:left 0.25s ease!important;z-index:100!important}#planrr-sidebar.open{left:0!important}#planrr-main{margin-left:0!important}.planrr-menu-toggle{display:flex!important}.planrr-sidebar-overlay{display:block!important}}@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
