@@ -24,9 +24,9 @@ describe('App', () => {
     expect(signInButtons.length).toBeGreaterThan(0);
   });
 
-  test('renders Get Started button on landing page', () => {
+  test('renders Buy Now button on landing page', () => {
     renderApp('/');
-    expect(screen.getByText(/Get Started/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Buy Now/i).length).toBeGreaterThan(0);
   });
 
   test('renders pricing section with plan tiers', () => {
