@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Routes, Route, Navigate, Link } from 'react-router-dom';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 
@@ -10479,9 +10479,33 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
           </div>
         ))}
       </div>
+      {(() => {
+        const plan = getPlanLimits(data.plan || 'solo');
+        const used = data.aiCallsThisMonth || 0;
+        const pctUsed = plan.aiCallsPerMonth === Infinity ? 0 : Math.min(100, Math.round((used / plan.aiCallsPerMonth) * 100));
+        return (
+          <div style={{ padding: '10px 18px', borderTop: `1px solid ${B.sidebarBorder}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 9, color: '#4A5568', textTransform: 'uppercase', letterSpacing: '0.1em' }}>AI Usage</span>
+              <span style={{ fontSize: 9, color: pctUsed > 80 ? '#f59e0b' : '#4A5568', fontWeight: 600 }}>
+                {plan.aiCallsPerMonth === Infinity ? `${used} calls` : `${used} / ${plan.aiCallsPerMonth}`}
+              </span>
+            </div>
+            {plan.aiCallsPerMonth !== Infinity && (
+              <div style={{ height: 3, background: '#2E3439', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: `${pctUsed}%`,
+                  background: pctUsed > 90 ? B.red : pctUsed > 70 ? B.amber : B.teal,
+                  borderRadius: 2, transition: 'width 0.5s ease',
+                }} />
+              </div>
+            )}
+          </div>
+        );
+      })()}
       <div
         style={{
-          padding: '12px 18px',
+          padding: '10px 18px',
           borderTop: `1px solid ${B.sidebarBorder}`,
           display: 'flex',
           alignItems: 'center',
@@ -22458,7 +22482,7 @@ function RecoveryPlanningView({ data, setData }) {
   );
 }
 
-function LandingPage({ onLogin, onSignup }) {
+function LandingPage({ onLogin, onSignup, onBuy }) {
   const [mobileNav, setMobileNav] = useState(false);
   return (
     <div
@@ -22545,7 +22569,7 @@ function LandingPage({ onLogin, onSignup }) {
             Sign In
           </button>
           <button
-            onClick={onSignup}
+            onClick={onBuy || onSignup}
             style={{
               background: GOLD,
               color: '#141719',
@@ -22558,7 +22582,7 @@ function LandingPage({ onLogin, onSignup }) {
               fontFamily: 'DM Sans,sans-serif',
             }}
           >
-            Get Started
+            Buy Now
           </button>
         </div>
         <button
@@ -22573,7 +22597,7 @@ function LandingPage({ onLogin, onSignup }) {
       {mobileNav && (
         <div style={{ background: 'rgba(20,23,25,0.98)', borderBottom: '1px solid rgba(194,150,74,0.22)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button onClick={() => { setMobileNav(false); onLogin(); }} style={{ background: 'none', color: '#94a3b8', border: '1px solid #3A4045', borderRadius: 6, padding: '10px', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', width: '100%' }}>Sign In</button>
-          <button onClick={() => { setMobileNav(false); onSignup(); }} style={{ background: GOLD, color: '#141719', border: 'none', borderRadius: 6, padding: '10px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', width: '100%' }}>Get Started</button>
+          <button onClick={() => { setMobileNav(false); (onBuy || onSignup)(); }} style={{ background: GOLD, color: '#141719', border: 'none', borderRadius: 6, padding: '10px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', width: '100%' }}>Buy Now</button>
         </div>
       )}
 
@@ -22645,7 +22669,7 @@ function LandingPage({ onLogin, onSignup }) {
         </p>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           <button
-            onClick={onSignup}
+            onClick={onBuy || onSignup}
             style={{
               background: GOLD,
               color: '#141719',
@@ -22660,7 +22684,7 @@ function LandingPage({ onLogin, onSignup }) {
               borderRadius: 4,
             }}
           >
-            Request Early Access
+            Start Free Trial
           </button>
           <button
             onClick={onLogin}
@@ -23456,7 +23480,7 @@ function LandingPage({ onLogin, onSignup }) {
           }}
         >
           <button
-            onClick={onSignup}
+            onClick={onBuy || onSignup}
             style={{
               background: GOLD,
               color: '#141719',
@@ -23471,7 +23495,7 @@ function LandingPage({ onLogin, onSignup }) {
               borderRadius: 4,
             }}
           >
-            Join Early Access
+            Start Free Trial
           </button>
           <button
             onClick={onLogin}
@@ -23761,15 +23785,14 @@ function LandingPage({ onLogin, onSignup }) {
               </div>
               <div>
                 <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 9, color: '#475569', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 12, fontWeight: 700 }}>Legal</div>
-                {[
-                  { label: 'Privacy Policy', href: '/privacy' },
-                  { label: 'Terms of Service', href: '/terms' },
-                ].map(t => (
-                  <a key={t.label} href={t.href} style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer', textDecoration: 'none' }}
-                    onMouseEnter={e => e.currentTarget.style.color = GOLD}
-                    onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
-                  >{t.label}</a>
-                ))}
+                <Link to="/privacy" style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer', textDecoration: 'none' }}
+                  onMouseEnter={e => e.currentTarget.style.color = GOLD}
+                  onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                >Privacy Policy</Link>
+                <Link to="/terms" style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer', textDecoration: 'none' }}
+                  onMouseEnter={e => e.currentTarget.style.color = GOLD}
+                  onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                >Terms of Service</Link>
               </div>
               <div>
                 <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 9, color: '#475569', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 12, fontWeight: 700 }}>Contact</div>
@@ -23832,7 +23855,7 @@ async function sbSignOut() {
       },
     });
   localStorage.removeItem('sb_session');
-  window.location.reload();
+  window.location.href = '/';
 }
 async function sbReset(email) {
   const r = await fetch(SB_URL + '/auth/v1/recover', {
@@ -23886,7 +23909,7 @@ function isLoggedIn() {
   }
 }
 
-function AuthScreen({ onAuth, initialMode }) {
+function AuthScreen({ onAuth, initialMode, onClose }) {
   const [mode, setMode] = useState(initialMode || 'login');
   const [fe, setFe] = useState('');
   const [fp, setFp] = useState('');
@@ -23995,84 +24018,38 @@ function AuthScreen({ onAuth, initialMode }) {
     setLoading(false);
   }
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: '#0f1113',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundImage:
-          'radial-gradient(ellipse at 30% 20%, rgba(27,201,196,0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(194,150,74,0.04) 0%, transparent 50%)',
-        backgroundSize: '100% 100%',
-      }}
-    >
-      {/* Subtle grid pattern */}
+    <div style={{ position: 'relative', width: '100%' }}>
+      {/* Logo + tagline above card */}
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 10 }}>
+          <div style={{ background: 'rgba(27,201,196,0.1)', borderRadius: 14, padding: '10px', border: '1px solid rgba(27,201,196,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BrainIcon size={24} color={B.teal} strokeWidth={1.3} />
+          </div>
+          <Wordmark dark size="md" />
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b', letterSpacing: '0.02em' }}>
+          AI-powered emergency management
+        </div>
+      </div>
+      {/* Card */}
       <div
         style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        style={{
+          background: 'rgba(28,31,34,0.95)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 18,
+          padding: '28px 32px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset',
           position: 'relative',
-          width: 440,
-          maxWidth: 'calc(100vw - 40px)',
         }}
       >
-        {/* Logo + tagline above card */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 12,
-              marginBottom: 12,
-            }}
-          >
-            <div
-              style={{
-                background: 'rgba(27,201,196,0.1)',
-                borderRadius: 14,
-                padding: '10px',
-                border: '1px solid rgba(27,201,196,0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <BrainIcon size={28} color={B.teal} strokeWidth={1.3} />
-            </div>
-            <Wordmark dark size="lg" />
-          </div>
-          <div
-            style={{ fontSize: 13, color: '#64748b', letterSpacing: '0.02em' }}
-          >
-            AI-powered emergency management
-          </div>
-        </div>
-        {/* Card */}
-        <div
-          style={{
-            background: 'rgba(28,31,34,0.85)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 18,
-            padding: '36px 40px',
-            boxShadow:
-              '0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset',
-          }}
-        >
+        {onClose && (
+          <button onClick={onClose} style={{
+            position: 'absolute', top: 14, right: 14, background: 'none', border: 'none',
+            color: '#64748b', fontSize: 18, cursor: 'pointer', padding: '4px 8px',
+            lineHeight: 1, borderRadius: 6,
+          }} aria-label="Close">✕</button>
+        )}
           {err && (
             <div
               style={{
@@ -24469,7 +24446,6 @@ function AuthScreen({ onAuth, initialMode }) {
           <div style={{ fontSize: 10, color: '#334155' }}>Plan Smartr</div>
         </div>
       </div>
-    </div>
   );
 }
 
@@ -25580,28 +25556,37 @@ function AppInner() {
         <LandingPage
           onLogin={() => setAuthMode('login')}
           onSignup={() => setAuthMode('signup')}
+          onBuy={() => setAuthMode('signup')}
         />
         {authMode && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 200,
-            }}
-          >
-            <AuthScreen
-              onAuth={() => {
-                setLoaded(false);
-                setAuthed(true);
-                setAuthMode(null);
-                navigate('/app/dashboard');
+          <>
+            <div
+              onClick={() => setAuthMode(null)}
+              style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(15,17,19,0.75)', backdropFilter: 'blur(6px)',
+                zIndex: 200, cursor: 'pointer',
               }}
-              initialMode={authMode}
             />
-          </div>
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%',
+              transform: 'translate(-50%,-50%)', zIndex: 201,
+              width: 440, maxWidth: 'calc(100vw - 32px)',
+              maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
+              animation: 'fadeUp 0.25s ease',
+            }}>
+              <AuthScreen
+                onAuth={() => {
+                  setLoaded(false);
+                  setAuthed(true);
+                  setAuthMode(null);
+                  navigate('/app/dashboard');
+                }}
+                initialMode={authMode}
+                onClose={() => setAuthMode(null)}
+              />
+            </div>
+          </>
         )}
       </>
     );
