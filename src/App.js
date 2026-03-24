@@ -3,6 +3,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate, Link } from 'react-router-dom';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import SharedReport from './pages/SharedReport';
+import { STARTER_PACKS, applyStarterPack } from './data/starterPacks';
+import { downloadICal } from './services/calendar';
+import { buildShareURL } from './services/shareReport';
+import { buildGrantNarrativePrompt } from './services/grantHelper';
 
 /* --- ERROR BOUNDARY ----------------------------------- */
 class ErrorBoundary extends Component {
@@ -770,23 +775,27 @@ const DEP_LABELS = {
    The tier is sent as `model_tier` in the request body so the
    backend Edge Function can select the right vendor model.
 -------------------------------------------------------- */
+/* Haiku handles nearly everything. Only PDF/image interpretation and
+   multi-document gap analysis benefit from a stronger model.
+   fast = Haiku (cheap, fast, good for 95% of tasks)
+   strong = Sonnet (only when reasoning across complex documents) */
 const MODEL_TIER_MAP = {
   general: 'fast',
   draft_rationale: 'fast',
   draft_aar: 'fast',
+  finalize_aar: 'fast',
   exec_summary: 'fast',
   training_needs: 'fast',
   grant_guidance: 'fast',
-  interpret: 'strong',
-  evidence: 'strong',
-  action_plan: 'strong',
+  thira_analysis: 'fast',
+  spr_generation: 'fast',
+  template_gen: 'fast',
+  action_plan: 'fast',
+  interpret: 'fast',
+  evidence: 'fast',
   interpret_doc: 'strong',
   bulk_intake: 'strong',
   gap_analysis: 'strong',
-  finalize_aar: 'strong',
-  thira_analysis: 'strong',
-  spr_generation: 'strong',
-  template_gen: 'strong',
 };
 
 function getModelTier(operation) {
@@ -2468,7 +2477,8 @@ function DocZone({ std, docs, onAddDoc, onRemoveDoc, onUpdateDocRationale }) {
         (chunk) => {
           draft += chunk;
           onUpdateDocRationale(doc.id, draft);
-        }
+        },
+        'draft_rationale'
       );
     } catch {
       onUpdateDocRationale(doc.id, 'Error drafting rationale.');
@@ -2987,7 +2997,7 @@ function DetailPanel({ stdId, standards, onUpdateStd, onClose }) {
           ...p,
           [mode]: fullText.replace(/AUTO_STATUS:\s*\w+\n?/i, '').trim(),
         }));
-      });
+      }, mode === 'action' ? 'action_plan' : mode);
       if (mode === 'interpret') {
         const m = fullText.match(/AUTO_STATUS:\s*(\w+)/i);
         if (m && ST[m[1].toLowerCase()] && st.status === 'not_started')
@@ -4039,7 +4049,7 @@ function ExerciseDetail({ ex, onUpdate, onClose, isIncident }) {
       await callAI(SYS, prompt, (chunk) => {
         draft += chunk;
         u('aarDraft', draft);
-      });
+      }, 'draft_aar');
     } catch {
       u('aarDraft', 'Error generating draft.');
     }
@@ -4061,7 +4071,7 @@ function ExerciseDetail({ ex, onUpdate, onClose, isIncident }) {
       await callAI(SYS, prompt, (chunk) => {
         final += chunk;
         u('aarFinal', final);
-      });
+      }, 'finalize_aar');
     } catch {
       u('aarFinal', 'Error generating final.');
     }
@@ -7549,7 +7559,8 @@ function TrainingManager({ data, setData }) {
       await callAI(
         SYS,
         `Training records:\n${s}\n\nAnalyze gaps vs EMAP 4.10. Recommend priorities for next 6 months.`,
-        (chunk) => setAiContent((p) => p + chunk)
+        (chunk) => setAiContent((p) => p + chunk),
+        'training_needs'
       );
     } catch {
       setAiContent('Error.');
@@ -10836,7 +10847,8 @@ function ReportsView({ data, orgName }) {
         }. Hazards profiled: ${
           (data.thira?.hazards || []).length
         }. Sections: ${breakdown}. Suitable for senior leadership and EMAP assessors.`,
-        (chunk) => setExec((p) => p + chunk)
+        (chunk) => setExec((p) => p + chunk),
+        'exec_summary'
       );
     } catch {
       setExec('Error.');
@@ -11966,7 +11978,8 @@ function GrantDetail({ grant, onUpdate, onClose }) {
         }\nNotes: ${
           grant.notes || 'none'
         }\n\nProvide: (1) what this grant type typically allows for EM programs, (2) common compliance pitfalls, (3) how this ties to EMAP standards, (4) recommended deliverables if not already listed.`,
-        (chunk) => setAiText((p) => p + chunk)
+        (chunk) => setAiText((p) => p + chunk),
+        'grant_guidance'
       );
     } catch {
       setAiText('Connection error.');
@@ -12987,7 +13000,23 @@ function GrantTracker({ data, setData }) {
           </p>
         </div>
         <CoachBanner moduleId="grants" />
-        <Btn label="+ Add Grant" onClick={() => setShowForm(true)} primary />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Btn label="+ Add Grant" onClick={() => setShowForm(true)} primary />
+          <Btn label="AI: Generate EMPG Narrative" onClick={async () => {
+            const prompt = buildGrantNarrativePrompt(data, 'empg');
+            let result = '';
+            try {
+              await callAI(SYS, prompt, (chunk) => { result += chunk; }, 'grant_guidance');
+              const blob = new Blob([result], { type: 'text/plain' });
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = `EMPG_Narrative_${(data.orgName || 'draft').replace(/\s/g, '_')}.txt`;
+              a.click();
+            } catch (e) {
+              alert(e.message || 'Error generating narrative');
+            }
+          }} />
+        </div>
       </div>
       {grants.length > 0 && (
         <div
@@ -13488,7 +13517,8 @@ function ThiraView({ data, setData }) {
         }:\nHazards: ${hazList || 'none entered'}\nState: ${
           data.state || 'unknown'
         }\n\nProvide: (1) analysis of the hazard profile and highest-risk threats, (2) core capabilities most likely to be stressed, (3) recommended capability targets, (4) how this feeds into EMAP 4.1 compliance and annual SPR submission, (5) any hazards common to this region that may be missing.`,
-        (chunk) => setAiText((p) => p + chunk)
+        (chunk) => setAiText((p) => p + chunk),
+        'thira_analysis'
       );
     } catch {
       setAiText('Connection error.');
@@ -13558,6 +13588,7 @@ function ThiraView({ data, setData }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             operation: 'bulk_intake',
+            model_tier: 'strong',
             content,
             max_tokens: 1400,
           }),
@@ -13650,7 +13681,8 @@ function ThiraView({ data, setData }) {
           hazList ||
           'No hazards entered yet - add hazards first for a complete document.'
         }\n\nGenerate a formal government document with these sections:\n\n1. EXECUTIVE SUMMARY\n   - Jurisdiction overview, purpose, summary of highest-risk hazards\n\n2. METHODOLOGY\n   - FEMA CPG 201 Third Edition compliance statement\n   - Process used to identify and assess threats and hazards\n   - Stakeholder engagement summary\n\n3. THREAT AND HAZARD IDENTIFICATION\n   - Table format: Hazard | Category | Probability | Magnitude | Risk Score\n   - Brief description of each identified hazard for this jurisdiction\n\n4. RISK ASSESSMENT\n   - Analysis of each high-risk hazard (Risk Score - 12)\n   - Consequence analysis: impacts on public, responders, infrastructure, economy\n   - Vulnerability assessment\n\n5. CAPABILITY TARGETS\n   - Core capabilities stressed by identified hazards\n   - Current capability gaps\n   - Recommended capability targets aligned with CPG 201\n\n6. SPR - STAKEHOLDER PREPAREDNESS REVIEW\n   - Program strengths\n   - Areas for improvement\n   - Corrective actions and milestones\n   - Resources and investment priorities\n\n7. MAINTENANCE AND UPDATE SCHEDULE\n   - Annual review process\n   - Triggers for off-cycle updates\n\nUse formal government document tone. Be specific to the jurisdiction and hazards provided. Include EMAP 4.1 compliance notes where relevant.`,
-        (chunk) => setGenDoc((p) => p + chunk)
+        (chunk) => setGenDoc((p) => p + chunk),
+        'spr_generation'
       );
     } catch {
       setGenDoc('Error generating document.');
@@ -16434,6 +16466,21 @@ function SettingsView({ data, updateData }) {
                 }}
               />
               <Btn
+                label="Export to Calendar (.ics)"
+                onClick={() => downloadICal(data)}
+              />
+              <Btn
+                label="Share Compliance Report"
+                onClick={() => {
+                  const url = buildShareURL(data);
+                  navigator.clipboard.writeText(url).then(() => {
+                    alert('Report link copied to clipboard!');
+                  }).catch(() => {
+                    prompt('Copy this link:', url);
+                  });
+                }}
+              />
+              <Btn
                 label="Import JSON"
                 onClick={() => {
                   const inp = document.createElement('input');
@@ -16451,6 +16498,37 @@ function SettingsView({ data, updateData }) {
                   inp.click();
                 }}
               />
+            </div>
+            {/* Starter Packs */}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${B.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: B.text, marginBottom: 10 }}>
+                Starter Packs
+              </div>
+              <div style={{ fontSize: 12, color: B.faint, marginBottom: 12, lineHeight: 1.6 }}>
+                Pre-built plans, exercises, and training for common EM program types. Data is added to your existing program.
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {Object.values(STARTER_PACKS).map(pack => (
+                  <button key={pack.id} onClick={() => {
+                    if (window.confirm(`Add the "${pack.name}" starter pack? This adds ${pack.plans.length} plans, ${pack.exercises.length} exercises, and ${pack.training.length} training records to your program.`)) {
+                      updateData(prev => applyStarterPack(prev, pack.id));
+                    }
+                  }} style={{
+                    background: B.card, border: `1px solid ${B.border}`, borderRadius: 10,
+                    padding: '14px 18px', cursor: 'pointer', textAlign: 'left', maxWidth: 280,
+                    transition: 'border-color 0.15s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = B.teal}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = B.border}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700, color: B.text, marginBottom: 4 }}>{pack.name}</div>
+                    <div style={{ fontSize: 11, color: B.faint, lineHeight: 1.5 }}>{pack.description}</div>
+                    <div style={{ fontSize: 10, color: B.teal, marginTop: 8, fontWeight: 600 }}>
+                      {pack.plans.length} plans · {pack.exercises.length} exercises · {pack.training.length} training
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
             <div
               style={{
@@ -18053,6 +18131,7 @@ function BulkIntake({ data, updateData }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               operation: 'bulk_intake',
+              model_tier: 'strong',
               content,
               max_tokens: 1200,
             }),
@@ -19335,7 +19414,8 @@ function PackageBuilder({ data, setView }) {
         } profiled\nItems being addressed: ${
           issues || 'none'
         }\nUse formal government document tone. Be specific about strengths and honest about items being addressed.`,
-        (chunk) => setAiExec((p) => p + chunk)
+        (chunk) => setAiExec((p) => p + chunk),
+        'exec_summary'
       );
     } catch {
       setAiExec('Error generating summary.');
@@ -21045,7 +21125,7 @@ function DocTemplatesView({ data, orgName }) {
       await callAI(sys, prompt, (chunk) => {
         result += chunk;
         setGenerated((p) => ({ ...p, [tpl.id]: result }));
-      });
+      }, 'template_gen');
     } catch {
       setGenerated((p) => ({
         ...p,
@@ -25554,12 +25634,8 @@ function AppInner() {
           onSignup={() => setAuthMode('signup')}
           onBuy={() => setAuthMode('signup')}
           onBuyPlan={(planId) => {
-            const link = STRIPE_BUY_LINKS[planId];
-            if (link) {
-              window.location.href = link;
-            } else {
-              setAuthMode('signup');
-            }
+            sessionStorage.setItem('planrr_pending_plan', planId);
+            setAuthMode('signup');
           }}
         />
         {authMode && (
@@ -25580,19 +25656,24 @@ function AppInner() {
               animation: 'fadeUp 0.25s ease',
             }}>
               <AuthScreen
-                onAuth={async () => {
+                onAuth={() => {
                   setLoaded(false);
                   setAuthed(true);
                   setAuthMode(null);
                   const pendingPlan = sessionStorage.getItem('planrr_pending_plan');
                   if (pendingPlan) {
                     sessionStorage.removeItem('planrr_pending_plan');
-                    try {
-                      const { createCheckoutSession } = await import('./services/billing');
-                      await createCheckoutSession(pendingPlan);
+                    const link = STRIPE_BUY_LINKS[pendingPlan];
+                    if (link) {
+                      try {
+                        const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
+                        const email = s?.user?.email || '';
+                        const url = email ? `${link}?prefilled_email=${encodeURIComponent(email)}` : link;
+                        window.location.href = url;
+                      } catch {
+                        window.location.href = link;
+                      }
                       return;
-                    } catch (e) {
-                      console.warn('Stripe checkout not available:', e.message);
                     }
                   }
                   navigate('/app/dashboard');
@@ -25636,6 +25717,7 @@ function AppInner() {
     );
   if (onboarding)
     return <Onboarding onComplete={handleOnboard} />;
+  const checkoutSuccess = new URLSearchParams(window.location.search).get('checkout') === 'success';
   const notifications = buildNotifications(data);
   return (
     <div
@@ -25909,6 +25991,22 @@ function AppInner() {
             Sign out
           </button>
         </div>
+        {checkoutSuccess && (
+          <div style={{
+            background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8,
+            padding: '12px 20px', margin: '8px 32px 0', display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#065F46', marginBottom: 2 }}>Welcome to planrr.app!</div>
+              <div style={{ fontSize: 12, color: '#047857' }}>Your subscription is active with a 14-day free trial. Start building your program.</div>
+            </div>
+            <button onClick={() => { window.history.replaceState({}, '', window.location.pathname); window.location.reload(); }} style={{
+              background: B.teal, color: '#fff', border: 'none', borderRadius: 6,
+              padding: '6px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>Got it</button>
+          </div>
+        )}
         {sessionExpired && (
           <div style={{
             background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8,
@@ -26031,6 +26129,7 @@ export default function App() {
       <Routes>
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/report" element={<SharedReport />} />
         <Route path="/app/*" element={<AppInner />} />
         <Route path="/*" element={<AppInner />} />
       </Routes>
