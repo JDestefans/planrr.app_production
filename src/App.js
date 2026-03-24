@@ -25554,12 +25554,8 @@ function AppInner() {
           onSignup={() => setAuthMode('signup')}
           onBuy={() => setAuthMode('signup')}
           onBuyPlan={(planId) => {
-            const link = STRIPE_BUY_LINKS[planId];
-            if (link) {
-              window.location.href = link;
-            } else {
-              setAuthMode('signup');
-            }
+            sessionStorage.setItem('planrr_pending_plan', planId);
+            setAuthMode('signup');
           }}
         />
         {authMode && (
@@ -25580,19 +25576,24 @@ function AppInner() {
               animation: 'fadeUp 0.25s ease',
             }}>
               <AuthScreen
-                onAuth={async () => {
+                onAuth={() => {
                   setLoaded(false);
                   setAuthed(true);
                   setAuthMode(null);
                   const pendingPlan = sessionStorage.getItem('planrr_pending_plan');
                   if (pendingPlan) {
                     sessionStorage.removeItem('planrr_pending_plan');
-                    try {
-                      const { createCheckoutSession } = await import('./services/billing');
-                      await createCheckoutSession(pendingPlan);
+                    const link = STRIPE_BUY_LINKS[pendingPlan];
+                    if (link) {
+                      try {
+                        const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
+                        const email = s?.user?.email || '';
+                        const url = email ? `${link}?prefilled_email=${encodeURIComponent(email)}` : link;
+                        window.location.href = url;
+                      } catch {
+                        window.location.href = link;
+                      }
                       return;
-                    } catch (e) {
-                      console.warn('Stripe checkout not available:', e.message);
                     }
                   }
                   navigate('/app/dashboard');
@@ -25636,6 +25637,7 @@ function AppInner() {
     );
   if (onboarding)
     return <Onboarding onComplete={handleOnboard} />;
+  const checkoutSuccess = new URLSearchParams(window.location.search).get('checkout') === 'success';
   const notifications = buildNotifications(data);
   return (
     <div
@@ -25909,6 +25911,22 @@ function AppInner() {
             Sign out
           </button>
         </div>
+        {checkoutSuccess && (
+          <div style={{
+            background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8,
+            padding: '12px 20px', margin: '8px 32px 0', display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#065F46', marginBottom: 2 }}>Welcome to planrr.app!</div>
+              <div style={{ fontSize: 12, color: '#047857' }}>Your subscription is active with a 14-day free trial. Start building your program.</div>
+            </div>
+            <button onClick={() => { window.history.replaceState({}, '', window.location.pathname); window.location.reload(); }} style={{
+              background: B.teal, color: '#fff', border: 'none', borderRadius: 6,
+              padding: '6px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>Got it</button>
+          </div>
+        )}
         {sessionExpired && (
           <div style={{
             background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8,
