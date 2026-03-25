@@ -833,6 +833,7 @@ async function callAI(system, prompt, onChunk, operation) {
   const op = operation || 'general';
   const tier = getModelTier(op);
   trackAICall();
+  const enrichedSystem = _currentData ? `${system}\n\nORGANIZATION CONTEXT:\n${buildOrgContext(_currentData)}` : system;
   const res = await fetch(
     SB_URL + '/functions/v1/ai-proxy',
     {
@@ -842,7 +843,7 @@ async function callAI(system, prompt, onChunk, operation) {
         operation: op,
         model_tier: tier,
         stream: true,
-        system,
+        system: enrichedSystem,
         prompt,
         max_tokens: tier === 'strong' ? 1600 : 1200,
       }),
@@ -1024,8 +1025,37 @@ async function mapDocToEMAP(docText, allStandards, onStatus) {
   return result;
 }
 
-const SYS =
+const SYS_BASE =
   'You are an EMAP accreditation and emergency management expert in PLANRR - Plan Smartr. Deep expertise in EMAP EMS 5-2022, HSEEP, and EM program management. Be specific, practical, and concise. No markdown headers.';
+
+function buildOrgContext(data) {
+  const parts = [];
+  if (data.orgName) parts.push(`Organization: ${data.orgName}`);
+  if (data.jurisdiction) parts.push(`Type: ${data.jurisdiction}`);
+  if (data.state) parts.push(`State: ${data.state}`);
+  if (data.emName) parts.push(`EM Director: ${data.emName}${data.emTitle ? `, ${data.emTitle}` : ''}`);
+  const empList = (data.employees || []).slice(0, 10);
+  if (empList.length > 0) parts.push(`Staff: ${empList.map(e => `${e.name}${e.role ? ` (${e.role})` : ''}`).join(', ')}`);
+  const overall = { compliant: 0, total: 0 };
+  Object.values(data.standards || {}).forEach(s => { overall.total++; if (s.status === 'compliant') overall.compliant++; });
+  parts.push(`EMAP: ${overall.compliant}/${overall.total} standards compliant`);
+  parts.push(`Training: ${(data.training || []).length}, Exercises: ${(data.exercises || []).length}, Partners: ${(data.partners || []).length}, Plans: ${(data.plans || []).length}`);
+  if ((data.aiMemory || []).length > 0) {
+    parts.push('ORG-SPECIFIC NOTES (remember these):\n' + data.aiMemory.map(m => `- ${m}`).join('\n'));
+  }
+  return parts.join('. ');
+}
+
+let _currentData = null;
+function setCurrentDataRef(d) { _currentData = d; }
+
+function getSYS() {
+  if (!_currentData) return SYS_BASE;
+  const ctx = buildOrgContext(_currentData);
+  return `${SYS_BASE}\n\nORGANIZATION CONTEXT:\n${ctx}`;
+}
+
+const SYS = SYS_BASE;
 
 /* --- PLAN & QUOTA DEFINITIONS -------------------------
    Per-org plan limits: seat caps and monthly AI call quotas.
@@ -16454,6 +16484,50 @@ function SettingsView({ data, updateData }) {
                 marginBottom: 10,
               }}
             >
+              AI Memory
+            </div>
+            <div style={{ fontSize: 12, color: B.faint, marginBottom: 12, lineHeight: 1.6 }}>
+              Teach the AI about your organization. These notes are included in every AI call so it knows your staff, nuances, and context.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+              {(data.aiMemory || []).map((m, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#f8fafa', border: `1px solid ${B.border}`, borderRadius: 8, padding: '8px 12px' }}>
+                  <span style={{ flex: 1, fontSize: 13, color: B.text, lineHeight: 1.5 }}>{m}</span>
+                  <button onClick={() => updateData(prev => ({ ...prev, aiMemory: (prev.aiMemory || []).filter((_, j) => j !== i) }))}
+                    style={{ background: 'none', border: 'none', color: '#d1d5db', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>
+                </div>
+              ))}
+              {(data.aiMemory || []).length === 0 && (
+                <div style={{ fontSize: 12, color: B.faint, fontStyle: 'italic' }}>No memory items yet. Add facts about your organization below.</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                id="planrr-ai-memory-input"
+                placeholder="e.g. Our EOC is co-located with the sheriff's office at 123 Main St"
+                style={{ flex: 1, padding: '8px 12px', border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: 'none' }}
+                onFocus={e => e.target.style.borderColor = B.teal}
+                onBlur={e => e.target.style.borderColor = B.border}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && e.target.value.trim()) {
+                    updateData(prev => ({ ...prev, aiMemory: [...(prev.aiMemory || []), e.target.value.trim()] }));
+                    e.target.value = '';
+                  }
+                }}
+              />
+              <Btn label="+ Add" onClick={() => {
+                const inp = document.getElementById('planrr-ai-memory-input');
+                if (inp && inp.value.trim()) {
+                  updateData(prev => ({ ...prev, aiMemory: [...(prev.aiMemory || []), inp.value.trim()] }));
+                  inp.value = '';
+                }
+              }} primary small />
+            </div>
+            <div style={{ fontSize: 11, color: B.faint, marginTop: 8, lineHeight: 1.5 }}>
+              Examples: "Jane handles all public information duties" · "We share a mobile command vehicle with County Fire" · "Our primary hazard is wildfire — we're in a WUI zone" · "Budget is primarily EMPG-funded with 50/50 match"
+            </div>
+
+            <div style={{ marginTop: 20, marginBottom: 10, fontSize: 14, fontWeight: 700, color: B.text }}>
               Data Management
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -25622,6 +25696,7 @@ function AppInner() {
         const synced = syncStandardsFromOps(loaded);
         if (synced) loaded.standards = synced;
         setData(loaded);
+        setCurrentDataRef(loaded);
         if (!d.orgName) setOnboarding(true);
         else if (!d.welcomeDismissed) setFirstRun(true);
       } else {
@@ -25661,6 +25736,7 @@ function AppInner() {
         final.activityLog = [...entries, ...final.activityLog].slice(0, 200);
       }
       clearTimeout(saveTimer.current);
+      setCurrentDataRef(final);
       saveTimer.current = setTimeout(() => saveData(final), 500);
       return final;
     });
