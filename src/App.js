@@ -804,9 +804,35 @@ function getModelTier(operation) {
   return MODEL_TIER_MAP[operation] || 'fast';
 }
 
+function trackAICall() {
+  try {
+    const key = 'planrr_ai_usage';
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+    const stored = JSON.parse(localStorage.getItem(key) || '{}');
+    if (stored.month !== monthKey) {
+      localStorage.setItem(key, JSON.stringify({ month: monthKey, count: 1 }));
+    } else {
+      stored.count = (stored.count || 0) + 1;
+      localStorage.setItem(key, JSON.stringify(stored));
+    }
+  } catch {}
+}
+
+function getAIUsageCount() {
+  try {
+    const key = 'planrr_ai_usage';
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+    const stored = JSON.parse(localStorage.getItem(key) || '{}');
+    return stored.month === monthKey ? (stored.count || 0) : 0;
+  } catch { return 0; }
+}
+
 async function callAI(system, prompt, onChunk, operation) {
   const op = operation || 'general';
   const tier = getModelTier(op);
+  trackAICall();
   const res = await fetch(
     SB_URL + '/functions/v1/ai-proxy',
     {
@@ -10530,7 +10556,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
       </div>
       {(() => {
         const plan = getPlanLimits(data.plan || 'solo');
-        const used = data.aiCallsThisMonth || 0;
+        const used = getAIUsageCount();
         const pctUsed = plan.aiCallsPerMonth === Infinity ? 0 : Math.min(100, Math.round((used / plan.aiCallsPerMonth) * 100));
         return (
           <div style={{ padding: '10px 18px', borderTop: `1px solid ${B.sidebarBorder}` }}>
