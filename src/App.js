@@ -9,6 +9,7 @@ import { STARTER_PACKS, applyStarterPack } from './data/starterPacks';
 import { downloadICal } from './services/calendar';
 import { buildShareURL } from './services/shareReport';
 import { buildGrantNarrativePrompt } from './services/grantHelper';
+import { extractTextFromPdf } from './services/pdfExtract';
 
 /* --- ERROR BOUNDARY ----------------------------------- */
 class ErrorBoundary extends Component {
@@ -18158,10 +18159,18 @@ function BulkIntake({ data, updateData }) {
           });
           content.push({ type: 'text', text: prompt });
         } else if (fd.type === 'pdf' && isLargePdf) {
-          content.push({
-            type: 'text',
-            text: `[Large PDF - "${file.name}" - analyzing by filename and metadata]\n\n${prompt}`,
-          });
+          try {
+            const extracted = await extractTextFromPdf(file);
+            content.push({
+              type: 'text',
+              text: `Document "${file.name}" (${extracted.totalPages} pages${extracted.truncated ? ', truncated' : ''}):\n${extracted.text}\n\n${prompt}`,
+            });
+          } catch {
+            content.push({
+              type: 'text',
+              text: `[PDF "${file.name}" - could not extract text, analyzing by filename]\n\n${prompt}`,
+            });
+          }
         } else if (fd.type === 'image') {
           content.push({
             type: 'image',
