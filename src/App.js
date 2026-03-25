@@ -18142,8 +18142,12 @@ function BulkIntake({ data, updateData }) {
       try {
         const fd = await readFileData(file);
         const content = [];
-        const prompt = `Analyze this document and map it to EMAP EMS 5-2022 standards for PLANRR.\nDocument: "${file.name}"\nReturn ONLY valid JSON, no other text:\n{"docType":"brief description","mappings":[{"stdId":"3.1.1","confidence":85,"status":"compliant","reason":"One sentence explanation"}]}\nMap to every relevant standard. Status options: compliant, in_progress, needs_review.`;
-        if (fd.type === 'pdf') {
+        const stdRef = ALL_SECTIONS.map(sec =>
+          `${sec.id} ${sec.title}: ${sec.standards.map(s => `${s.id} - ${s.text.slice(0, 80)}`).join('; ')}`
+        ).join('\n');
+        const prompt = `Analyze this document and map it to the CORRECT EMAP EMS 5-2022 standards.\nDocument: "${file.name}"\n\nEMAP STANDARD REFERENCE (use these EXACT IDs):\n${stdRef}\n\nIMPORTANT: Match based on document content to the standard descriptions above. For example:\n- MOUs/agreements → 4.7.x (Mutual Aid)\n- Training records → 4.10.x (Training & Education)\n- Exercise AARs → 4.11.x (Exercises, Evaluations & Corrective Actions)\n- EOPs → 4.5.x (Operational Planning)\n- COOPs → 4.4.x (Continuity Planning)\n- Budget/funding docs → 3.4.x (Administration & Finance)\n- Hazard analysis → 4.1.x (Hazard ID & Risk Assessment)\n\nReturn ONLY valid JSON:\n{"docType":"brief description","mappings":[{"stdId":"4.7.1","confidence":85,"status":"in_progress","reason":"One sentence explanation"}]}`;
+        const isLargePdf = fd.type === 'pdf' && fd.data.length > 500000;
+        if (fd.type === 'pdf' && !isLargePdf) {
           content.push({
             type: 'document',
             source: {
@@ -18153,6 +18157,11 @@ function BulkIntake({ data, updateData }) {
             },
           });
           content.push({ type: 'text', text: prompt });
+        } else if (fd.type === 'pdf' && isLargePdf) {
+          content.push({
+            type: 'text',
+            text: `[Large PDF - "${file.name}" - analyzing by filename and metadata]\n\n${prompt}`,
+          });
         } else if (fd.type === 'image') {
           content.push({
             type: 'image',
@@ -18162,7 +18171,7 @@ function BulkIntake({ data, updateData }) {
         } else {
           content.push({
             type: 'text',
-            text: `Document:\n${fd.data}\n\n${prompt}`,
+            text: `Document "${file.name}":\n${fd.data.slice(0, 15000)}\n\n${prompt}`,
           });
         }
         const res = await fetch(
