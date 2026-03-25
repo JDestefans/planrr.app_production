@@ -15630,7 +15630,7 @@ function SettingsView({ data, updateData }) {
                 <FInput
                   value={form.orgName}
                   onChange={(v) => setForm((p) => ({ ...p, orgName: v }))}
-                  placeholder="San Joaquin County OES"
+                  placeholder="e.g. County Emergency Management"
                 />
               </div>
               <div>
@@ -15716,7 +15716,7 @@ function SettingsView({ data, updateData }) {
                 <FInput
                   value={form.emName}
                   onChange={(v) => setForm((p) => ({ ...p, emName: v }))}
-                  placeholder="Jane Smith"
+                  placeholder="Full name"
                 />
               </div>
               <div>
@@ -24283,7 +24283,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="email"
                 value={fe}
                 onChange={(e) => setFe(e.target.value)}
-                placeholder="you@county.gov"
+                placeholder="you@agency.gov"
                 style={iS}
                 required
               />
@@ -24374,7 +24374,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="email"
                 value={fe}
                 onChange={(e) => setFe(e.target.value)}
-                placeholder="you@county.gov"
+                placeholder="you@agency.gov"
                 style={iS}
                 required
               />
@@ -24383,7 +24383,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="text"
                 value={fo}
                 onChange={(e) => setFo(e.target.value)}
-                placeholder="San Joaquin County OES"
+                placeholder="e.g. County Emergency Management"
                 style={iS}
                 required
               />
@@ -24463,7 +24463,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="email"
                 value={fe}
                 onChange={(e) => setFe(e.target.value)}
-                placeholder="you@county.gov"
+                placeholder="you@agency.gov"
                 style={iS}
                 required
               />
@@ -25275,7 +25275,7 @@ function Onboarding({ onComplete }) {
           <FInput
             value={name}
             onChange={setName}
-            placeholder="e.g. San Joaquin County OES"
+            placeholder="e.g. County Emergency Management"
           />
         </div>
         <div
