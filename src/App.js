@@ -7926,17 +7926,24 @@ function TrainingManager({ data, setData }) {
 ------------------------------------------------------- */
 function PartnerRegistry({ data, setData }) {
   const [showForm, setShowForm] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState({
     name: '',
     type: 'County Agency',
     contact: '',
+    contactTitle: '',
     phone: '',
     email: '',
+    address: '',
     agreementType: 'MOU',
     signed: today(),
     expires: '',
+    reviewDate: '',
     notes: '',
+    scope: '',
+    resourcesShared: '',
+    activationTrigger: '',
+    emapStandards: '4.7',
   });
   const [filter, setFilter] = useState('all');
   const TYPES = [
@@ -7962,30 +7969,19 @@ function PartnerRegistry({ data, setData }) {
       ],
     }));
     setForm({
-      name: '',
-      type: 'County Agency',
-      contact: '',
-      phone: '',
-      email: '',
-      agreementType: 'MOU',
-      signed: today(),
-      expires: '',
-      notes: '',
+      name: '', type: 'County Agency', contact: '', contactTitle: '', phone: '', email: '', address: '',
+      agreementType: 'MOU', signed: today(), expires: '', reviewDate: '', notes: '', scope: '',
+      resourcesShared: '', activationTrigger: '', emapStandards: '4.7',
     });
     setShowForm(false);
   };
-  const remove = (id) =>
-    setData((prev) => ({
-      ...prev,
-      partners: prev.partners.filter((p) => p.id !== id),
-    }));
+  const remove = (id) => {
+    setData((prev) => ({ ...prev, partners: prev.partners.filter((p) => p.id !== id) }));
+    if (selectedId === id) setSelectedId(null);
+  };
   const updatePartner = (id, field, val) =>
-    setData((prev) => ({
-      ...prev,
-      partners: prev.partners.map((p) =>
-        p.id === id ? { ...p, [field]: val } : p
-      ),
-    }));
+    setData((prev) => ({ ...prev, partners: prev.partners.map((p) => p.id === id ? { ...p, [field]: val } : p) }));
+  const sel = selectedId ? data.partners.find(p => p.id === selectedId) : null;
   const expiring = data.partners.filter((p) => {
     const d = daysUntil(p.expires);
     return d !== null && d >= 0 && d < 90;
@@ -8083,300 +8079,111 @@ function PartnerRegistry({ data, setData }) {
         ))}
       </div>
       {showForm && (
-        <div
-          style={{
-            background: B.blueLight,
-            border: `1px solid ${B.blueBorder}`,
-            borderRadius: 10,
-            padding: '16px 18px',
-            marginBottom: 14,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: B.text,
-              marginBottom: 12,
-            }}
-          >
-            Add Partner
+        <div style={{ background: B.blueLight, border: `1px solid ${B.blueBorder}`, borderRadius: 10, padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: B.text, marginBottom: 12 }}>Add Partner / Agreement</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div><Label>Organization Name</Label><FInput value={form.name} onChange={v => setForm(p => ({ ...p, name: v }))} placeholder="Partner organization" /></div>
+            <div><Label>Type</Label><FSel value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}>{TYPES.map(t => <option key={t}>{t}</option>)}</FSel></div>
+            <div><Label>Agreement Type</Label><FSel value={form.agreementType} onChange={v => setForm(p => ({ ...p, agreementType: v }))}>{AGR.map(t => <option key={t}>{t}</option>)}</FSel></div>
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr 1fr',
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div>
-              <Label>Organization Name</Label>
-              <FInput
-                value={form.name}
-                onChange={(v) => setForm((p) => ({ ...p, name: v }))}
-                placeholder="Partner organization"
-              />
-            </div>
-            <div>
-              <Label>Type</Label>
-              <FSel
-                value={form.type}
-                onChange={(v) => setForm((p) => ({ ...p, type: v }))}
-              >
-                {TYPES.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </FSel>
-            </div>
-            <div>
-              <Label>Agreement Type</Label>
-              <FSel
-                value={form.agreementType}
-                onChange={(v) => setForm((p) => ({ ...p, agreementType: v }))}
-              >
-                {AGR.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </FSel>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div><Label>Contact Name</Label><FInput value={form.contact} onChange={v => setForm(p => ({ ...p, contact: v }))} placeholder="Name" /></div>
+            <div><Label>Title</Label><FInput value={form.contactTitle} onChange={v => setForm(p => ({ ...p, contactTitle: v }))} placeholder="Title" /></div>
+            <div><Label>Phone</Label><FInput value={form.phone} onChange={v => setForm(p => ({ ...p, phone: v }))} placeholder="Phone" /></div>
+            <div><Label>Email</Label><FInput value={form.email} onChange={v => setForm(p => ({ ...p, email: v }))} placeholder="Email" /></div>
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr 1fr',
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div>
-              <Label>Contact</Label>
-              <FInput
-                value={form.contact}
-                onChange={(v) => setForm((p) => ({ ...p, contact: v }))}
-                placeholder="Name"
-              />
-            </div>
-            <div>
-              <Label>Phone</Label>
-              <FInput
-                value={form.phone}
-                onChange={(v) => setForm((p) => ({ ...p, phone: v }))}
-                placeholder="Phone"
-              />
-            </div>
-            <div>
-              <Label>Signed</Label>
-              <FInput
-                type="date"
-                value={form.signed}
-                onChange={(v) => setForm((p) => ({ ...p, signed: v }))}
-              />
-            </div>
-            <div>
-              <Label>Expires</Label>
-              <FInput
-                type="date"
-                value={form.expires}
-                onChange={(v) => setForm((p) => ({ ...p, expires: v }))}
-              />
-            </div>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <Label>Notes</Label>
-            <FInput
-              value={form.notes}
-              onChange={(v) => setForm((p) => ({ ...p, notes: v }))}
-              placeholder="Scope, capabilities..."
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div><Label>Date Signed</Label><FInput type="date" value={form.signed} onChange={v => setForm(p => ({ ...p, signed: v }))} /></div>
+            <div><Label>Expiration Date</Label><FInput type="date" value={form.expires} onChange={v => setForm(p => ({ ...p, expires: v }))} /></div>
+            <div><Label>Next Review Date</Label><FInput type="date" value={form.reviewDate} onChange={v => setForm(p => ({ ...p, reviewDate: v }))} /></div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Btn label="Save" onClick={save} primary />
+            <Btn label="Save Partner" onClick={save} primary />
             <Btn label="Cancel" onClick={() => setShowForm(false)} />
           </div>
         </div>
       )}
-      {filtered.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: '32px', color: B.faint }}>
-          No partner agreements yet
-        </Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {filtered.map((p) => {
-            const days = daysUntil(p.expires);
-            const urgColor =
-              days === null
-                ? B.green
-                : days < 0
-                ? B.red
-                : days < 30
-                ? B.red
-                : days < 90
-                ? B.amber
-                : B.green;
-            return (
-              <div
-                key={p.id}
-                style={{
-                  background: B.card,
-                  border: `1px solid ${
-                    days !== null && days < 90 ? B.amberBorder : B.border
-                  }`,
-                  borderRadius: 9,
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    alignItems: 'center',
-                    padding: '13px 16px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() =>
-                    setExpandedId(expandedId === p.id ? null : p.id)
-                  }
-                >
-                  <div
-                    style={{
-                      width: 34,
-                      height: 34,
-                      background: B.blueLight,
-                      borderRadius: 8,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 13,
-                      color: B.blue,
-                      flexShrink: 0,
-                    }}
-                  >
-                    -
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 7,
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        marginBottom: 3,
-                      }}
-                    >
-                      <span
-                        style={{ fontSize: 13, fontWeight: 700, color: B.text }}
-                      >
-                        {p.name}
-                      </span>
-                      <Tag
-                        label={p.agreementType}
-                        color={B.blue}
-                        bg={B.blueLight}
-                        border={B.blueBorder}
-                      />
-                      <Tag
-                        label={p.type}
-                        color={B.muted}
-                        bg="#f8fafc"
-                        border={B.border}
-                      />
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {filtered.length === 0 ? (
+            <Card style={{ textAlign: 'center', padding: '32px', color: B.faint }}>No partner agreements yet</Card>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {filtered.map(p => {
+                const days = daysUntil(p.expires);
+                const urgColor = days === null ? B.green : days < 0 ? B.red : days < 30 ? B.red : days < 90 ? B.amber : B.green;
+                const isActive = selectedId === p.id;
+                return (
+                  <div key={p.id} onClick={() => setSelectedId(isActive ? null : p.id)} style={{
+                    background: B.card, border: `1px solid ${isActive ? B.teal : days !== null && days < 90 ? B.amberBorder : B.border}`,
+                    borderRadius: 9, padding: '13px 16px', cursor: 'pointer', transition: 'all 0.15s',
+                    borderLeft: isActive ? `3px solid ${B.teal}` : `3px solid transparent`,
+                  }}>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: B.text }}>{p.name}</span>
+                      <Tag label={p.agreementType} color={B.blue} bg={B.blueLight} border={B.blueBorder} />
+                      <Tag label={p.type} color={B.muted} bg="#f8fafc" border={B.border} />
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 12,
-                        fontSize: 11,
-                        color: B.faint,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {p.contact && <span>- {p.contact}</span>}
+                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: B.faint, flexWrap: 'wrap' }}>
+                      {p.contact && <span>{p.contact}{p.contactTitle ? `, ${p.contactTitle}` : ''}</span>}
                       <span>Signed: {fmtDate(p.signed)}</span>
-                      {p.expires && (
-                        <span
-                          style={{
-                            color: urgColor,
-                            fontWeight: days !== null && days < 90 ? 700 : 400,
-                          }}
-                        >
-                          Expires: {fmtDate(p.expires)}
-                          {days !== null && days < 90
-                            ? ` (${days < 0 ? 'EXPIRED' : `${days}d`})`
-                            : ''}
-                        </span>
-                      )}
-                      {(p.docs || []).length > 0 && (
-                        <span>
-                          📎 {p.docs.length} file{p.docs.length > 1 ? 's' : ''}
-                        </span>
-                      )}
+                      {p.expires && <span style={{ color: urgColor, fontWeight: days !== null && days < 90 ? 700 : 400 }}>
+                        Expires: {fmtDate(p.expires)}{days !== null && days < 90 ? ` (${days < 0 ? 'EXPIRED' : `${days}d`})` : ''}
+                      </span>}
+                      {(p.docs || []).length > 0 && <span>📎 {p.docs.length}</span>}
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      remove(p.id);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#d1d5db',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                    }}
-                  >
-                    -
-                  </button>
-                  <span
-                    style={{
-                      color: B.faint,
-                      fontSize: 10,
-                      transform:
-                        expandedId === p.id ? 'rotate(180deg)' : 'rotate(0)',
-                      transition: 'transform 0.2s',
-                    }}
-                  >
-                    -
-                  </span>
-                </div>
-                {expandedId === p.id && (
-                  <div
-                    style={{
-                      padding: '12px 16px',
-                      borderTop: `1px solid #f4f7f8`,
-                      background: '#fafcfc',
-                    }}
-                  >
-                    <div style={{ marginBottom: 10 }}>
-                      <Label>Notes / Scope</Label>
-                      <FTextarea
-                        value={p.notes || ''}
-                        onChange={(v) => updatePartner(p.id, 'notes', v)}
-                        rows={2}
-                        placeholder="Scope of agreement, capabilities..."
-                      />
-                    </div>
-                    <Attachments
-                      docs={p.docs || []}
-                      onAdd={(doc) =>
-                        updatePartner(p.id, 'docs', [...(p.docs || []), doc])
-                      }
-                      onRemove={(id) =>
-                        updatePartner(
-                          p.id,
-                          'docs',
-                          (p.docs || []).filter((d) => d.id !== id)
-                        )
-                      }
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
+        {sel && (
+          <div style={{ width: 380, flexShrink: 0, position: 'sticky', top: 68, alignSelf: 'flex-start' }}>
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ background: B.blueLight, padding: '16px 20px', borderBottom: `1px solid ${B.blueBorder}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: B.text, marginBottom: 4 }}>{sel.name}</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <Tag label={sel.agreementType} color={B.blue} bg="#fff" border={B.blueBorder} />
+                      <Tag label={sel.type} color={B.muted} bg="#fff" border={B.border} />
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: B.faint, cursor: 'pointer', fontSize: 16 }}>✕</button>
+                </div>
+              </div>
+              <div style={{ padding: '16px 20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                  <div><Label>Contact</Label><FInput value={sel.contact || ''} onChange={v => updatePartner(sel.id, 'contact', v)} placeholder="Name" /></div>
+                  <div><Label>Title</Label><FInput value={sel.contactTitle || ''} onChange={v => updatePartner(sel.id, 'contactTitle', v)} placeholder="Title" /></div>
+                  <div><Label>Phone</Label><FInput value={sel.phone || ''} onChange={v => updatePartner(sel.id, 'phone', v)} placeholder="Phone" /></div>
+                  <div><Label>Email</Label><FInput value={sel.email || ''} onChange={v => updatePartner(sel.id, 'email', v)} placeholder="Email" /></div>
+                </div>
+                <div style={{ marginBottom: 14 }}><Label>Address</Label><FInput value={sel.address || ''} onChange={v => updatePartner(sel.id, 'address', v)} placeholder="Mailing address" /></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+                  <div><Label>Signed</Label><FInput type="date" value={sel.signed || ''} onChange={v => updatePartner(sel.id, 'signed', v)} /></div>
+                  <div><Label>Expires</Label><FInput type="date" value={sel.expires || ''} onChange={v => updatePartner(sel.id, 'expires', v)} /></div>
+                  <div><Label>Review Date</Label><FInput type="date" value={sel.reviewDate || ''} onChange={v => updatePartner(sel.id, 'reviewDate', v)} /></div>
+                </div>
+                <div style={{ marginBottom: 14 }}><Label>Scope of Agreement</Label><FTextarea value={sel.scope || ''} onChange={v => updatePartner(sel.id, 'scope', v)} rows={2} placeholder="What does this agreement cover? Mutual aid capabilities, shared resources..." /></div>
+                <div style={{ marginBottom: 14 }}><Label>Resources Shared</Label><FInput value={sel.resourcesShared || ''} onChange={v => updatePartner(sel.id, 'resourcesShared', v)} placeholder="e.g. Heavy equipment, shelter facilities, personnel" /></div>
+                <div style={{ marginBottom: 14 }}><Label>Activation Trigger</Label><FInput value={sel.activationTrigger || ''} onChange={v => updatePartner(sel.id, 'activationTrigger', v)} placeholder="e.g. Declaration of emergency, mutual aid request" /></div>
+                <div style={{ marginBottom: 14 }}><Label>EMAP Standards</Label><FInput value={sel.emapStandards || ''} onChange={v => updatePartner(sel.id, 'emapStandards', v)} placeholder="e.g. 4.7.1, 4.7.3" /></div>
+                <div style={{ marginBottom: 14 }}><Label>Notes</Label><FTextarea value={sel.notes || ''} onChange={v => updatePartner(sel.id, 'notes', v)} rows={2} placeholder="Additional notes..." /></div>
+                <Attachments
+                  docs={sel.docs || []}
+                  onAdd={doc => updatePartner(sel.id, 'docs', [...(sel.docs || []), doc])}
+                  onRemove={id => updatePartner(sel.id, 'docs', (sel.docs || []).filter(d => d.id !== id))}
+                />
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${B.border}` }}>
+                  <button onClick={() => { remove(sel.id); }} style={{ fontSize: 11, color: B.red, background: 'none', border: `1px solid ${B.redBorder}`, borderRadius: 6, padding: '5px 12px', cursor: 'pointer' }}>Remove Partner</button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
