@@ -13624,10 +13624,15 @@ function ThiraView({ data, setData }) {
         const errBody = await res.text().catch(() => '');
         throw new Error(errBody || `API error (${res.status})`);
       }
-      const json = await res.json();
-      const parsed = JSON.parse(
-        (json.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
-      );
+      const rawText = await res.text();
+      let json;
+      try { json = JSON.parse(rawText); } catch { throw new Error('Invalid AI response'); }
+      const aiText = (json.content?.[0]?.text || '{}').replace(/```json\s?|```/g, '').trim();
+      let parsed;
+      try { parsed = JSON.parse(aiText); } catch {
+        const m = aiText.match(/\{[\s\S]*\}/);
+        parsed = m ? JSON.parse(m[0]) : {};
+      }
       const extracted = parsed.hazards || [];
 
       if (extracted.length === 0) {
@@ -18162,9 +18167,9 @@ function BulkIntake({ data, updateData }) {
               operation: 'bulk_intake',
               model_tier: 'strong',
               stream: false,
-              system: 'You are an EMAP EMS 5-2022 document analyst for PLANRR. Analyze documents and map them to relevant EMAP standards. Return only valid JSON with no markdown formatting.',
+              system: 'You are an EMAP EMS 5-2022 document analyst for PLANRR. Analyze documents and map them to relevant EMAP standards. Return ONLY a valid JSON object with no markdown, no code fences, no explanation. Format: {"docType":"description","mappings":[{"stdId":"4.5.1","confidence":85,"status":"in_progress","reason":"explanation"}]}',
               content,
-              max_tokens: 2000,
+              max_tokens: 4000,
             }),
           }
         );
@@ -18172,10 +18177,18 @@ function BulkIntake({ data, updateData }) {
           const errBody = await res.text().catch(() => '');
           throw new Error(errBody || `API error (${res.status})`);
         }
-        const json = await res.json();
-        const parsed = JSON.parse(
-          (json.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
-        );
+        const rawText = await res.text();
+        let json;
+        try { json = JSON.parse(rawText); } catch {
+          throw new Error('Invalid response from AI: ' + rawText.slice(0, 100));
+        }
+        const aiText = json.content?.[0]?.text || '{}';
+        const cleaned = aiText.replace(/```json\s?|```/g, '').trim();
+        let parsed;
+        try { parsed = JSON.parse(cleaned); } catch {
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { docType: 'Document', mappings: [] };
+        }
         const mappings = (parsed.mappings || []).filter(
           (m) => m.stdId && ALL_STANDARDS.find((s) => s.id === m.stdId)
         );
