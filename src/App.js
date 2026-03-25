@@ -8878,6 +8878,13 @@ function ResourcesView({ data, setData }) {
     fundingSource: '',
     deployable: true,
     assignedTo: '',
+    femaEquipType: '',
+    aelNumber: '',
+    usefulLife: '',
+    federalSharePct: '75',
+    grantProgram: '',
+    make: '',
+    model: '',
   });
   const CATS = [
     'Equipment',
@@ -8930,6 +8937,13 @@ function ResourcesView({ data, setData }) {
       fundingSource: '',
       deployable: true,
       assignedTo: '',
+      femaEquipType: '',
+      aelNumber: '',
+      usefulLife: '',
+      federalSharePct: '75',
+      grantProgram: '',
+      make: '',
+      model: '',
     });
     setShowForm(false);
   };
@@ -9097,7 +9111,25 @@ function ResourcesView({ data, setData }) {
               : ''}
           </p>
         </div>
-        <Btn label="+ Add Resource" onClick={() => setShowForm(true)} primary />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn label="+ Add Resource" onClick={() => setShowForm(true)} primary />
+          {resources.length > 0 && <Btn label="Export All (CSV)" onClick={() => {
+            const headers = ['Name','Make','Model','Serial/Tag','Category','Qty','Location','Condition','Status','AEL Number','FEMA Equipment Type','Acquisition Date','Acquisition Cost','Federal Share %','Grant Program','Useful Life (yrs)','Funding Source','Deployable','Deployed To','Incident'];
+            const rows = resources.map(r => [
+              r.name, r.make || '', r.model || '', r.serialNumber || '', r.category, r.qty,
+              r.location || '', r.condition, r.status, r.aelNumber || '', r.femaEquipType || '',
+              r.acquisitionDate || '', r.acquisitionCost || '', r.federalSharePct || '',
+              r.grantProgram || '', r.usefulLife || '', r.fundingSource || '',
+              r.deployable !== false ? 'Yes' : 'No', r.deployedTo || '', r.deployedIncident || ''
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `resource_inventory_${today()}.csv`;
+            a.click();
+          }} />}
+        </div>
       </div>
       <CoachBanner moduleId="resources" />
 
@@ -9331,6 +9363,58 @@ function ResourcesView({ data, setData }) {
               </FSel>
             </div>
           </div>
+          <div style={{ borderTop: `1px solid ${B.border}`, paddingTop: 12, marginTop: 4, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: B.faint, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>FEMA Reimbursement Info</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <Label>Make</Label>
+                <FInput value={form.make} onChange={(v) => setForm((p) => ({ ...p, make: v }))} placeholder="e.g. Motorola" />
+              </div>
+              <div>
+                <Label>Model</Label>
+                <FInput value={form.model} onChange={(v) => setForm((p) => ({ ...p, model: v }))} placeholder="e.g. APX 8000" />
+              </div>
+              <div>
+                <Label>AEL Number</Label>
+                <FInput value={form.aelNumber} onChange={(v) => setForm((p) => ({ ...p, aelNumber: v }))} placeholder="e.g. 06CP-01-PORT" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+              <div>
+                <Label>FEMA Equipment Type</Label>
+                <FSel value={form.femaEquipType} onChange={(v) => setForm((p) => ({ ...p, femaEquipType: v }))}>
+                  <option value="">Select...</option>
+                  <option value="communications">Communications</option>
+                  <option value="cyber">Cyber Security</option>
+                  <option value="decontam">Decontamination</option>
+                  <option value="detection">Detection</option>
+                  <option value="explosive">Explosive Device</option>
+                  <option value="fire">Fire</option>
+                  <option value="info_tech">Information Technology</option>
+                  <option value="interop">Interoperable Comms</option>
+                  <option value="medical">Medical</option>
+                  <option value="ppe">PPE</option>
+                  <option value="power">Power / Generators</option>
+                  <option value="search_rescue">Search & Rescue</option>
+                  <option value="vehicle">Vehicles</option>
+                  <option value="watercraft">Watercraft</option>
+                  <option value="other">Other</option>
+                </FSel>
+              </div>
+              <div>
+                <Label>Grant Program</Label>
+                <FInput value={form.grantProgram} onChange={(v) => setForm((p) => ({ ...p, grantProgram: v }))} placeholder="e.g. FY24 EMPG" />
+              </div>
+              <div>
+                <Label>Federal Share %</Label>
+                <FInput value={form.federalSharePct} onChange={(v) => setForm((p) => ({ ...p, federalSharePct: v }))} placeholder="75" />
+              </div>
+              <div>
+                <Label>Useful Life (years)</Label>
+                <FInput value={form.usefulLife} onChange={(v) => setForm((p) => ({ ...p, usefulLife: v }))} placeholder="e.g. 5" />
+              </div>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Btn label="Add Resource" onClick={save} primary small />
             <Btn label="Cancel" onClick={() => setShowForm(false)} small />
@@ -9554,6 +9638,27 @@ function ResourcesView({ data, setData }) {
             Track where your deployable assets are right now. Click any resource
             in the Inventory tab to deploy or return it.
           </div>
+          {deployed > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <Btn label="Export Deployed Equipment (CSV)" onClick={() => {
+                const deployedRes = resources.filter(r => r.status === 'deployed');
+                const headers = ['Name','Make','Model','Serial/Tag','Category','Qty','AEL Number','FEMA Equipment Type','Acquisition Cost','Federal Share %','Grant Program','Useful Life (yrs)','Funding Source','Deployed To','Incident','Assigned To','Deploy Date','Condition'];
+                const rows = deployedRes.map(r => [
+                  r.name, r.make || '', r.model || '', r.serialNumber || '', r.category, r.qty,
+                  r.aelNumber || '', r.femaEquipType || '', r.acquisitionCost || '', r.federalSharePct || '',
+                  r.grantProgram || '', r.usefulLife || '', r.fundingSource || '',
+                  r.deployedTo || '', r.deployedIncident || '', r.deployedAssignee || '',
+                  r.deployedDate || '', r.condition
+                ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+                const csv = [headers.join(','), ...rows].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `deployed_equipment_${today()}.csv`;
+                a.click();
+              }} small />
+            </div>
+          )}
           {deployed === 0 ? (
             <Card
               style={{ textAlign: 'center', padding: '32px', color: B.faint }}
