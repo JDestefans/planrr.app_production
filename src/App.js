@@ -1702,7 +1702,7 @@ const Btn = ({
     {loading ? 'Working...' : label}
   </button>
 );
-const Card = ({ children, style }) => (
+const Card = ({ children, style, ...props }) => (
   <div
     style={{
       background: B.card,
@@ -1712,6 +1712,7 @@ const Card = ({ children, style }) => (
       boxShadow: '0 1px 4px rgba(0,0,0,0.03), 0 4px 12px rgba(0,0,0,0.02)',
       ...style,
     }}
+    {...props}
   >
     {children}
   </div>
