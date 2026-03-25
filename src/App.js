@@ -179,30 +179,12 @@ function ViewSkeleton() {
   );
 }
 
-/* Minimal square mark - placeholder until final logo is locked */
 const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-    <rect
-      x="1.5"
-      y="1.5"
-      width="29"
-      height="29"
-      rx="6"
-      stroke={color}
-      strokeWidth={strokeWidth}
-      fill="none"
-    />
-    <text
-      x="16"
-      y="23"
-      textAnchor="middle"
-      fill={color}
-      fontSize="17"
-      fontWeight="800"
-      fontFamily="'Syne','DM Sans',sans-serif"
-    >
-      P
-    </text>
+    <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke={color} strokeWidth={strokeWidth} fill="none" />
+    <g transform="translate(5.995,23) scale(0.017,-0.017)">
+      <path d="M302 165V340H801Q831 340 851.5 349.5Q872 359 872 390Q872 422 851.5 431.0Q831 440 801 440H318V0H68V640H762Q837 640 902.5 629.5Q968 619 1017.0 592.0Q1066 565 1094.0 516.0Q1122 467 1122 390Q1122 313 1094.0 268.0Q1066 223 1017.0 201.0Q968 179 902.5 172.0Q837 165 762 165Z" fill={color} />
+    </g>
   </svg>
 );
 
@@ -10266,6 +10248,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg, collapse
       style={{
         width: collapsed ? 64 : 244,
         background: B.sidebar,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='20' cy='20' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='60' cy='10' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='100' cy='30' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='40' cy='60' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='80' cy='50' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='10' cy='90' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='60' cy='100' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='100' cy='80' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='110' cy='110' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Cline x1='20' y1='20' x2='60' y2='10' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='60' y1='10' x2='100' y2='30' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='20' y1='20' x2='40' y2='60' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='80' y2='50' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='100' y1='30' x2='80' y2='50' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='10' y2='90' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='10' y1='90' x2='60' y2='100' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='80' y1='50' x2='100' y2='80' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='100' y2='80' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='100' y1='80' x2='110' y2='110' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3C/svg%3E")`,
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
@@ -22755,9 +22738,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
         background: '#1C1F22',
         minHeight: '100vh',
         color: '#f0f4fa',
-        backgroundImage:
-          'linear-gradient(rgba(194,150,74,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(194,150,74,0.03) 1px,transparent 1px)',
-        backgroundSize: '52px 52px',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='20' cy='20' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='60' cy='10' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='100' cy='30' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='40' cy='60' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='80' cy='50' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='10' cy='90' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='60' cy='100' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='100' cy='80' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='110' cy='110' r='1.5' fill='rgba(194,150,74,0.07)'/%3E%3Cline x1='20' y1='20' x2='60' y2='10' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='10' x2='100' y2='30' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='20' y1='20' x2='40' y2='60' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='80' y2='50' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='100' y1='30' x2='80' y2='50' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='10' y2='90' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='10' y1='90' x2='60' y2='100' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='80' y1='50' x2='100' y2='80' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='100' y2='80' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='100' y1='80' x2='110' y2='110' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='110' y2='110' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3C/svg%3E")`,
       }}
     >
       <style>{`@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}.planrr-header-actions{display:none!important}.planrr-mobile-menu-btn{display:flex!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
