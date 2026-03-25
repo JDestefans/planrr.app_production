@@ -179,30 +179,12 @@ function ViewSkeleton() {
   );
 }
 
-/* Minimal square mark - placeholder until final logo is locked */
 const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-    <rect
-      x="1.5"
-      y="1.5"
-      width="29"
-      height="29"
-      rx="6"
-      stroke={color}
-      strokeWidth={strokeWidth}
-      fill="none"
-    />
-    <text
-      x="16"
-      y="23"
-      textAnchor="middle"
-      fill={color}
-      fontSize="17"
-      fontWeight="800"
-      fontFamily="'Syne','DM Sans',sans-serif"
-    >
-      P
-    </text>
+    <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke={color} strokeWidth={strokeWidth} fill="none" />
+    <g transform="translate(5.995,23) scale(0.017,-0.017)">
+      <path d="M302 165V340H801Q831 340 851.5 349.5Q872 359 872 390Q872 422 851.5 431.0Q831 440 801 440H318V0H68V640H762Q837 640 902.5 629.5Q968 619 1017.0 592.0Q1066 565 1094.0 516.0Q1122 467 1122 390Q1122 313 1094.0 268.0Q1066 223 1017.0 201.0Q968 179 902.5 172.0Q837 165 762 165Z" fill={color} />
+    </g>
   </svg>
 );
 
@@ -833,6 +815,7 @@ async function callAI(system, prompt, onChunk, operation) {
   const op = operation || 'general';
   const tier = getModelTier(op);
   trackAICall();
+  const enrichedSystem = _currentData ? `${system}\n\nORGANIZATION CONTEXT:\n${buildOrgContext(_currentData)}` : system;
   const res = await fetch(
     SB_URL + '/functions/v1/ai-proxy',
     {
@@ -842,7 +825,7 @@ async function callAI(system, prompt, onChunk, operation) {
         operation: op,
         model_tier: tier,
         stream: true,
-        system,
+        system: enrichedSystem,
         prompt,
         max_tokens: tier === 'strong' ? 1600 : 1200,
       }),
@@ -1024,8 +1007,37 @@ async function mapDocToEMAP(docText, allStandards, onStatus) {
   return result;
 }
 
-const SYS =
+const SYS_BASE =
   'You are an EMAP accreditation and emergency management expert in PLANRR - Plan Smartr. Deep expertise in EMAP EMS 5-2022, HSEEP, and EM program management. Be specific, practical, and concise. No markdown headers.';
+
+function buildOrgContext(data) {
+  const parts = [];
+  if (data.orgName) parts.push(`Organization: ${data.orgName}`);
+  if (data.jurisdiction) parts.push(`Type: ${data.jurisdiction}`);
+  if (data.state) parts.push(`State: ${data.state}`);
+  if (data.emName) parts.push(`EM Director: ${data.emName}${data.emTitle ? `, ${data.emTitle}` : ''}`);
+  const empList = (data.employees || []).slice(0, 10);
+  if (empList.length > 0) parts.push(`Staff: ${empList.map(e => `${e.name}${e.role ? ` (${e.role})` : ''}`).join(', ')}`);
+  const overall = { compliant: 0, total: 0 };
+  Object.values(data.standards || {}).forEach(s => { overall.total++; if (s.status === 'compliant') overall.compliant++; });
+  parts.push(`EMAP: ${overall.compliant}/${overall.total} standards compliant`);
+  parts.push(`Training: ${(data.training || []).length}, Exercises: ${(data.exercises || []).length}, Partners: ${(data.partners || []).length}, Plans: ${(data.plans || []).length}`);
+  if ((data.aiMemory || []).length > 0) {
+    parts.push('ORG-SPECIFIC NOTES (remember these):\n' + data.aiMemory.map(m => `- ${m}`).join('\n'));
+  }
+  return parts.join('. ');
+}
+
+let _currentData = null;
+function setCurrentDataRef(d) { _currentData = d; }
+
+function getSYS() {
+  if (!_currentData) return SYS_BASE;
+  const ctx = buildOrgContext(_currentData);
+  return `${SYS_BASE}\n\nORGANIZATION CONTEXT:\n${ctx}`;
+}
+
+const SYS = SYS_BASE;
 
 /* --- PLAN & QUOTA DEFINITIONS -------------------------
    Per-org plan limits: seat caps and monthly AI call quotas.
@@ -10236,6 +10248,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg, collapse
       style={{
         width: collapsed ? 64 : 244,
         background: B.sidebar,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='20' cy='20' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='60' cy='10' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='100' cy='30' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='40' cy='60' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='80' cy='50' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='10' cy='90' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='60' cy='100' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Ccircle cx='100' cy='80' r='0.8' fill='rgba(255,255,255,0.015)'/%3E%3Ccircle cx='110' cy='110' r='1' fill='rgba(255,255,255,0.02)'/%3E%3Cline x1='20' y1='20' x2='60' y2='10' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='60' y1='10' x2='100' y2='30' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='20' y1='20' x2='40' y2='60' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='80' y2='50' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='100' y1='30' x2='80' y2='50' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='10' y2='90' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='10' y1='90' x2='60' y2='100' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='80' y1='50' x2='100' y2='80' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='100' y2='80' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3Cline x1='100' y1='80' x2='110' y2='110' stroke='rgba(255,255,255,0.015)' stroke-width='0.5'/%3E%3C/svg%3E")`,
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
@@ -16454,6 +16467,50 @@ function SettingsView({ data, updateData }) {
                 marginBottom: 10,
               }}
             >
+              AI Memory
+            </div>
+            <div style={{ fontSize: 12, color: B.faint, marginBottom: 12, lineHeight: 1.6 }}>
+              Teach the AI about your organization. These notes are included in every AI call so it knows your staff, nuances, and context.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+              {(data.aiMemory || []).map((m, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#f8fafa', border: `1px solid ${B.border}`, borderRadius: 8, padding: '8px 12px' }}>
+                  <span style={{ flex: 1, fontSize: 13, color: B.text, lineHeight: 1.5 }}>{m}</span>
+                  <button onClick={() => updateData(prev => ({ ...prev, aiMemory: (prev.aiMemory || []).filter((_, j) => j !== i) }))}
+                    style={{ background: 'none', border: 'none', color: '#d1d5db', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>
+                </div>
+              ))}
+              {(data.aiMemory || []).length === 0 && (
+                <div style={{ fontSize: 12, color: B.faint, fontStyle: 'italic' }}>No memory items yet. Add facts about your organization below.</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                id="planrr-ai-memory-input"
+                placeholder="e.g. Our EOC is co-located with the sheriff's office at 123 Main St"
+                style={{ flex: 1, padding: '8px 12px', border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: 'none' }}
+                onFocus={e => e.target.style.borderColor = B.teal}
+                onBlur={e => e.target.style.borderColor = B.border}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && e.target.value.trim()) {
+                    updateData(prev => ({ ...prev, aiMemory: [...(prev.aiMemory || []), e.target.value.trim()] }));
+                    e.target.value = '';
+                  }
+                }}
+              />
+              <Btn label="+ Add" onClick={() => {
+                const inp = document.getElementById('planrr-ai-memory-input');
+                if (inp && inp.value.trim()) {
+                  updateData(prev => ({ ...prev, aiMemory: [...(prev.aiMemory || []), inp.value.trim()] }));
+                  inp.value = '';
+                }
+              }} primary small />
+            </div>
+            <div style={{ fontSize: 11, color: B.faint, marginTop: 8, lineHeight: 1.5 }}>
+              Examples: "Jane handles all public information duties" · "We share a mobile command vehicle with County Fire" · "Our primary hazard is wildfire — we're in a WUI zone" · "Budget is primarily EMPG-funded with 50/50 match"
+            </div>
+
+            <div style={{ marginTop: 20, marginBottom: 10, fontSize: 14, fontWeight: 700, color: B.text }}>
               Data Management
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -22681,9 +22738,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
         background: '#1C1F22',
         minHeight: '100vh',
         color: '#f0f4fa',
-        backgroundImage:
-          'linear-gradient(rgba(194,150,74,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(194,150,74,0.03) 1px,transparent 1px)',
-        backgroundSize: '52px 52px',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='20' cy='20' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='60' cy='10' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='100' cy='30' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='40' cy='60' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='80' cy='50' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='10' cy='90' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='60' cy='100' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='100' cy='80' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='110' cy='110' r='1.5' fill='rgba(194,150,74,0.07)'/%3E%3Cline x1='20' y1='20' x2='60' y2='10' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='10' x2='100' y2='30' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='20' y1='20' x2='40' y2='60' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='80' y2='50' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='100' y1='30' x2='80' y2='50' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='10' y2='90' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='10' y1='90' x2='60' y2='100' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='80' y1='50' x2='100' y2='80' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='100' y2='80' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='100' y1='80' x2='110' y2='110' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='110' y2='110' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3C/svg%3E")`,
       }}
     >
       <style>{`@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}.planrr-header-actions{display:none!important}.planrr-mobile-menu-btn{display:flex!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
@@ -25622,6 +25677,7 @@ function AppInner() {
         const synced = syncStandardsFromOps(loaded);
         if (synced) loaded.standards = synced;
         setData(loaded);
+        setCurrentDataRef(loaded);
         if (!d.orgName) setOnboarding(true);
         else if (!d.welcomeDismissed) setFirstRun(true);
       } else {
@@ -25661,6 +25717,7 @@ function AppInner() {
         final.activityLog = [...entries, ...final.activityLog].slice(0, 200);
       }
       clearTimeout(saveTimer.current);
+      setCurrentDataRef(final);
       saveTimer.current = setTimeout(() => saveData(final), 500);
       return final;
     });
