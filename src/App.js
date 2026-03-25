@@ -9,7 +9,7 @@ import { STARTER_PACKS, applyStarterPack } from './data/starterPacks';
 import { downloadICal } from './services/calendar';
 import { buildShareURL } from './services/shareReport';
 import { buildGrantNarrativePrompt } from './services/grantHelper';
-import { extractTextFromPdf } from './services/pdfExtract';
+// pdfExtract loaded dynamically to avoid Jest import.meta issues
 
 /* --- ERROR BOUNDARY ----------------------------------- */
 class ErrorBoundary extends Component {
@@ -16617,7 +16617,7 @@ function SettingsView({ data, updateData }) {
   );
 }
 
-function Dashboard({ data, setView, orgName }) {
+function Dashboard({ data, setView, orgName, updateData }) {
   const { training, exercises, partners, plans, resources } = data;
   const overall = useMemo(
     () => overallStats(data.standards || {}),
@@ -17035,6 +17035,43 @@ function Dashboard({ data, setView, orgName }) {
           {data.state || ''}
         </p>
       </div>
+
+      {(plans || []).length === 0 && (exercises || []).length === 0 && updateData && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(27,201,196,0.06), rgba(194,150,74,0.06))',
+          border: `1px solid ${B.border}`, borderRadius: 14, padding: '24px 28px', marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: B.text, marginBottom: 4 }}>
+            Quick Start — Load a Starter Pack
+          </div>
+          <div style={{ fontSize: 13, color: B.faint, marginBottom: 16, lineHeight: 1.6 }}>
+            Get up and running fast with pre-built plans, exercises, and training tailored to your agency type. Everything is customizable.
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {Object.values(STARTER_PACKS).map(pack => (
+              <button key={pack.id} onClick={() => {
+                if (window.confirm(`Load "${pack.name}"?\n\nThis adds ${pack.plans.length} plans with templates, ${pack.exercises.length} exercises, and ${pack.training.length} training records.`)) {
+                  updateData(prev => applyStarterPack(prev, pack.id));
+                }
+              }} style={{
+                background: B.card, border: `1px solid ${B.border}`, borderRadius: 10,
+                padding: '16px 20px', cursor: 'pointer', textAlign: 'left', flex: '1 1 240px',
+                transition: 'all 0.15s', minWidth: 240,
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = B.teal; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = B.border; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 8 }}>{pack.icon}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: B.text, marginBottom: 4 }}>{pack.name}</div>
+                <div style={{ fontSize: 12, color: B.faint, lineHeight: 1.5, marginBottom: 10 }}>{pack.description}</div>
+                <div style={{ fontSize: 11, color: B.teal, fontWeight: 600 }}>
+                  {pack.plans.length} plans · {pack.exercises.length} exercises · {pack.training.length} training
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         style={{
@@ -18160,6 +18197,7 @@ function BulkIntake({ data, updateData }) {
           content.push({ type: 'text', text: prompt });
         } else if (fd.type === 'pdf' && isLargePdf) {
           try {
+            const { extractTextFromPdf } = await import('./services/pdfExtract');
             const extracted = await extractTextFromPdf(file);
             content.push({
               type: 'text',
@@ -26071,7 +26109,7 @@ function AppInner() {
             />
           )}
           {view === 'dashboard' && (
-            <Dashboard data={data} setView={setView} orgName={data.orgName} />
+            <Dashboard data={data} setView={setView} orgName={data.orgName} updateData={updateData} />
           )}
           {view === 'accreditation' && (
             <AccreditationView data={data} updateData={updateData} />
