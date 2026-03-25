@@ -9,6 +9,7 @@ import { STARTER_PACKS, applyStarterPack } from './data/starterPacks';
 import { downloadICal } from './services/calendar';
 import { buildShareURL } from './services/shareReport';
 import { buildGrantNarrativePrompt } from './services/grantHelper';
+// pdfExtract loaded dynamically to avoid Jest import.meta issues
 
 /* --- ERROR BOUNDARY ----------------------------------- */
 class ErrorBoundary extends Component {
@@ -803,9 +804,35 @@ function getModelTier(operation) {
   return MODEL_TIER_MAP[operation] || 'fast';
 }
 
+function trackAICall() {
+  try {
+    const key = 'planrr_ai_usage';
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+    const stored = JSON.parse(localStorage.getItem(key) || '{}');
+    if (stored.month !== monthKey) {
+      localStorage.setItem(key, JSON.stringify({ month: monthKey, count: 1 }));
+    } else {
+      stored.count = (stored.count || 0) + 1;
+      localStorage.setItem(key, JSON.stringify(stored));
+    }
+  } catch {}
+}
+
+function getAIUsageCount() {
+  try {
+    const key = 'planrr_ai_usage';
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+    const stored = JSON.parse(localStorage.getItem(key) || '{}');
+    return stored.month === monthKey ? (stored.count || 0) : 0;
+  } catch { return 0; }
+}
+
 async function callAI(system, prompt, onChunk, operation) {
   const op = operation || 'general';
   const tier = getModelTier(op);
+  trackAICall();
   const res = await fetch(
     SB_URL + '/functions/v1/ai-proxy',
     {
@@ -1675,7 +1702,7 @@ const Btn = ({
     {loading ? 'Working...' : label}
   </button>
 );
-const Card = ({ children, style }) => (
+const Card = ({ children, style, ...props }) => (
   <div
     style={{
       background: B.card,
@@ -1685,6 +1712,7 @@ const Card = ({ children, style }) => (
       boxShadow: '0 1px 4px rgba(0,0,0,0.03), 0 4px 12px rgba(0,0,0,0.02)',
       ...style,
     }}
+    {...props}
   >
     {children}
   </div>
@@ -3022,21 +3050,28 @@ function DetailPanel({ stdId, standards, onUpdateStd, onClose, onAddCapItem }) {
         (st.notes ? st.notes + '\n\n-\n\n' : '') + aiData[aiMode]
       );
       if (aiMode === 'action' && onAddCapItem) {
-        const lines = aiData[aiMode].split('\n').filter(l => l.match(/^\d+[\.\)]\s/));
-        lines.forEach(line => {
-          const text = line.replace(/^\d+[\.\)]\s*/, '').trim();
-          if (text.length > 5) {
-            onAddCapItem({
-              id: uid(),
-              item: text,
-              source: `EMAP ${std.id}`,
-              stdRef: std.id,
-              priority: 'medium',
-              status: 'open',
-              closed: false,
-              addedAt: Date.now(),
-            });
-          }
+        const lines = aiData[aiMode].split('\n').filter(l =>
+          l.match(/^\s*(\d+[\.\):]|\-|\•|\*)\s/)
+        );
+        const items = lines.map(line =>
+          line.replace(/^\s*(\d+[\.\):]|\-|\•|\*)\s*/, '')
+            .replace(/\*\*/g, '').trim()
+        ).filter(t => t.length > 10);
+        if (items.length === 0) {
+          const sentences = aiData[aiMode].split(/[.!]\s/).filter(s => s.length > 20).slice(0, 8);
+          items.push(...sentences.map(s => s.trim()));
+        }
+        items.forEach(text => {
+          onAddCapItem({
+            id: uid(),
+            item: text.slice(0, 200),
+            source: `EMAP ${std.id}`,
+            stdRef: std.id,
+            priority: 'medium',
+            status: 'open',
+            closed: false,
+            addedAt: Date.now(),
+          });
         });
       }
       setAdopted(true);
@@ -7891,17 +7926,24 @@ function TrainingManager({ data, setData }) {
 ------------------------------------------------------- */
 function PartnerRegistry({ data, setData }) {
   const [showForm, setShowForm] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState({
     name: '',
     type: 'County Agency',
     contact: '',
+    contactTitle: '',
     phone: '',
     email: '',
+    address: '',
     agreementType: 'MOU',
     signed: today(),
     expires: '',
+    reviewDate: '',
     notes: '',
+    scope: '',
+    resourcesShared: '',
+    activationTrigger: '',
+    emapStandards: '4.7',
   });
   const [filter, setFilter] = useState('all');
   const TYPES = [
@@ -7927,30 +7969,19 @@ function PartnerRegistry({ data, setData }) {
       ],
     }));
     setForm({
-      name: '',
-      type: 'County Agency',
-      contact: '',
-      phone: '',
-      email: '',
-      agreementType: 'MOU',
-      signed: today(),
-      expires: '',
-      notes: '',
+      name: '', type: 'County Agency', contact: '', contactTitle: '', phone: '', email: '', address: '',
+      agreementType: 'MOU', signed: today(), expires: '', reviewDate: '', notes: '', scope: '',
+      resourcesShared: '', activationTrigger: '', emapStandards: '4.7',
     });
     setShowForm(false);
   };
-  const remove = (id) =>
-    setData((prev) => ({
-      ...prev,
-      partners: prev.partners.filter((p) => p.id !== id),
-    }));
+  const remove = (id) => {
+    setData((prev) => ({ ...prev, partners: prev.partners.filter((p) => p.id !== id) }));
+    if (selectedId === id) setSelectedId(null);
+  };
   const updatePartner = (id, field, val) =>
-    setData((prev) => ({
-      ...prev,
-      partners: prev.partners.map((p) =>
-        p.id === id ? { ...p, [field]: val } : p
-      ),
-    }));
+    setData((prev) => ({ ...prev, partners: prev.partners.map((p) => p.id === id ? { ...p, [field]: val } : p) }));
+  const sel = selectedId ? data.partners.find(p => p.id === selectedId) : null;
   const expiring = data.partners.filter((p) => {
     const d = daysUntil(p.expires);
     return d !== null && d >= 0 && d < 90;
@@ -8048,300 +8079,111 @@ function PartnerRegistry({ data, setData }) {
         ))}
       </div>
       {showForm && (
-        <div
-          style={{
-            background: B.blueLight,
-            border: `1px solid ${B.blueBorder}`,
-            borderRadius: 10,
-            padding: '16px 18px',
-            marginBottom: 14,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: B.text,
-              marginBottom: 12,
-            }}
-          >
-            Add Partner
+        <div style={{ background: B.blueLight, border: `1px solid ${B.blueBorder}`, borderRadius: 10, padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: B.text, marginBottom: 12 }}>Add Partner / Agreement</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div><Label>Organization Name</Label><FInput value={form.name} onChange={v => setForm(p => ({ ...p, name: v }))} placeholder="Partner organization" /></div>
+            <div><Label>Type</Label><FSel value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}>{TYPES.map(t => <option key={t}>{t}</option>)}</FSel></div>
+            <div><Label>Agreement Type</Label><FSel value={form.agreementType} onChange={v => setForm(p => ({ ...p, agreementType: v }))}>{AGR.map(t => <option key={t}>{t}</option>)}</FSel></div>
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr 1fr',
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div>
-              <Label>Organization Name</Label>
-              <FInput
-                value={form.name}
-                onChange={(v) => setForm((p) => ({ ...p, name: v }))}
-                placeholder="Partner organization"
-              />
-            </div>
-            <div>
-              <Label>Type</Label>
-              <FSel
-                value={form.type}
-                onChange={(v) => setForm((p) => ({ ...p, type: v }))}
-              >
-                {TYPES.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </FSel>
-            </div>
-            <div>
-              <Label>Agreement Type</Label>
-              <FSel
-                value={form.agreementType}
-                onChange={(v) => setForm((p) => ({ ...p, agreementType: v }))}
-              >
-                {AGR.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </FSel>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div><Label>Contact Name</Label><FInput value={form.contact} onChange={v => setForm(p => ({ ...p, contact: v }))} placeholder="Name" /></div>
+            <div><Label>Title</Label><FInput value={form.contactTitle} onChange={v => setForm(p => ({ ...p, contactTitle: v }))} placeholder="Title" /></div>
+            <div><Label>Phone</Label><FInput value={form.phone} onChange={v => setForm(p => ({ ...p, phone: v }))} placeholder="Phone" /></div>
+            <div><Label>Email</Label><FInput value={form.email} onChange={v => setForm(p => ({ ...p, email: v }))} placeholder="Email" /></div>
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr 1fr',
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div>
-              <Label>Contact</Label>
-              <FInput
-                value={form.contact}
-                onChange={(v) => setForm((p) => ({ ...p, contact: v }))}
-                placeholder="Name"
-              />
-            </div>
-            <div>
-              <Label>Phone</Label>
-              <FInput
-                value={form.phone}
-                onChange={(v) => setForm((p) => ({ ...p, phone: v }))}
-                placeholder="Phone"
-              />
-            </div>
-            <div>
-              <Label>Signed</Label>
-              <FInput
-                type="date"
-                value={form.signed}
-                onChange={(v) => setForm((p) => ({ ...p, signed: v }))}
-              />
-            </div>
-            <div>
-              <Label>Expires</Label>
-              <FInput
-                type="date"
-                value={form.expires}
-                onChange={(v) => setForm((p) => ({ ...p, expires: v }))}
-              />
-            </div>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <Label>Notes</Label>
-            <FInput
-              value={form.notes}
-              onChange={(v) => setForm((p) => ({ ...p, notes: v }))}
-              placeholder="Scope, capabilities..."
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div><Label>Date Signed</Label><FInput type="date" value={form.signed} onChange={v => setForm(p => ({ ...p, signed: v }))} /></div>
+            <div><Label>Expiration Date</Label><FInput type="date" value={form.expires} onChange={v => setForm(p => ({ ...p, expires: v }))} /></div>
+            <div><Label>Next Review Date</Label><FInput type="date" value={form.reviewDate} onChange={v => setForm(p => ({ ...p, reviewDate: v }))} /></div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Btn label="Save" onClick={save} primary />
+            <Btn label="Save Partner" onClick={save} primary />
             <Btn label="Cancel" onClick={() => setShowForm(false)} />
           </div>
         </div>
       )}
-      {filtered.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: '32px', color: B.faint }}>
-          No partner agreements yet
-        </Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {filtered.map((p) => {
-            const days = daysUntil(p.expires);
-            const urgColor =
-              days === null
-                ? B.green
-                : days < 0
-                ? B.red
-                : days < 30
-                ? B.red
-                : days < 90
-                ? B.amber
-                : B.green;
-            return (
-              <div
-                key={p.id}
-                style={{
-                  background: B.card,
-                  border: `1px solid ${
-                    days !== null && days < 90 ? B.amberBorder : B.border
-                  }`,
-                  borderRadius: 9,
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    alignItems: 'center',
-                    padding: '13px 16px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() =>
-                    setExpandedId(expandedId === p.id ? null : p.id)
-                  }
-                >
-                  <div
-                    style={{
-                      width: 34,
-                      height: 34,
-                      background: B.blueLight,
-                      borderRadius: 8,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 13,
-                      color: B.blue,
-                      flexShrink: 0,
-                    }}
-                  >
-                    -
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 7,
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        marginBottom: 3,
-                      }}
-                    >
-                      <span
-                        style={{ fontSize: 13, fontWeight: 700, color: B.text }}
-                      >
-                        {p.name}
-                      </span>
-                      <Tag
-                        label={p.agreementType}
-                        color={B.blue}
-                        bg={B.blueLight}
-                        border={B.blueBorder}
-                      />
-                      <Tag
-                        label={p.type}
-                        color={B.muted}
-                        bg="#f8fafc"
-                        border={B.border}
-                      />
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {filtered.length === 0 ? (
+            <Card style={{ textAlign: 'center', padding: '32px', color: B.faint }}>No partner agreements yet</Card>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {filtered.map(p => {
+                const days = daysUntil(p.expires);
+                const urgColor = days === null ? B.green : days < 0 ? B.red : days < 30 ? B.red : days < 90 ? B.amber : B.green;
+                const isActive = selectedId === p.id;
+                return (
+                  <div key={p.id} onClick={() => setSelectedId(isActive ? null : p.id)} style={{
+                    background: B.card, border: `1px solid ${isActive ? B.teal : days !== null && days < 90 ? B.amberBorder : B.border}`,
+                    borderRadius: 9, padding: '13px 16px', cursor: 'pointer', transition: 'all 0.15s',
+                    borderLeft: isActive ? `3px solid ${B.teal}` : `3px solid transparent`,
+                  }}>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: B.text }}>{p.name}</span>
+                      <Tag label={p.agreementType} color={B.blue} bg={B.blueLight} border={B.blueBorder} />
+                      <Tag label={p.type} color={B.muted} bg="#f8fafc" border={B.border} />
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 12,
-                        fontSize: 11,
-                        color: B.faint,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {p.contact && <span>- {p.contact}</span>}
+                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: B.faint, flexWrap: 'wrap' }}>
+                      {p.contact && <span>{p.contact}{p.contactTitle ? `, ${p.contactTitle}` : ''}</span>}
                       <span>Signed: {fmtDate(p.signed)}</span>
-                      {p.expires && (
-                        <span
-                          style={{
-                            color: urgColor,
-                            fontWeight: days !== null && days < 90 ? 700 : 400,
-                          }}
-                        >
-                          Expires: {fmtDate(p.expires)}
-                          {days !== null && days < 90
-                            ? ` (${days < 0 ? 'EXPIRED' : `${days}d`})`
-                            : ''}
-                        </span>
-                      )}
-                      {(p.docs || []).length > 0 && (
-                        <span>
-                          📎 {p.docs.length} file{p.docs.length > 1 ? 's' : ''}
-                        </span>
-                      )}
+                      {p.expires && <span style={{ color: urgColor, fontWeight: days !== null && days < 90 ? 700 : 400 }}>
+                        Expires: {fmtDate(p.expires)}{days !== null && days < 90 ? ` (${days < 0 ? 'EXPIRED' : `${days}d`})` : ''}
+                      </span>}
+                      {(p.docs || []).length > 0 && <span>📎 {p.docs.length}</span>}
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      remove(p.id);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#d1d5db',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                    }}
-                  >
-                    -
-                  </button>
-                  <span
-                    style={{
-                      color: B.faint,
-                      fontSize: 10,
-                      transform:
-                        expandedId === p.id ? 'rotate(180deg)' : 'rotate(0)',
-                      transition: 'transform 0.2s',
-                    }}
-                  >
-                    -
-                  </span>
-                </div>
-                {expandedId === p.id && (
-                  <div
-                    style={{
-                      padding: '12px 16px',
-                      borderTop: `1px solid #f4f7f8`,
-                      background: '#fafcfc',
-                    }}
-                  >
-                    <div style={{ marginBottom: 10 }}>
-                      <Label>Notes / Scope</Label>
-                      <FTextarea
-                        value={p.notes || ''}
-                        onChange={(v) => updatePartner(p.id, 'notes', v)}
-                        rows={2}
-                        placeholder="Scope of agreement, capabilities..."
-                      />
-                    </div>
-                    <Attachments
-                      docs={p.docs || []}
-                      onAdd={(doc) =>
-                        updatePartner(p.id, 'docs', [...(p.docs || []), doc])
-                      }
-                      onRemove={(id) =>
-                        updatePartner(
-                          p.id,
-                          'docs',
-                          (p.docs || []).filter((d) => d.id !== id)
-                        )
-                      }
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
+        {sel && (
+          <div style={{ width: 380, flexShrink: 0, position: 'sticky', top: 68, alignSelf: 'flex-start' }}>
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ background: B.blueLight, padding: '16px 20px', borderBottom: `1px solid ${B.blueBorder}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: B.text, marginBottom: 4 }}>{sel.name}</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <Tag label={sel.agreementType} color={B.blue} bg="#fff" border={B.blueBorder} />
+                      <Tag label={sel.type} color={B.muted} bg="#fff" border={B.border} />
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: B.faint, cursor: 'pointer', fontSize: 16 }}>✕</button>
+                </div>
+              </div>
+              <div style={{ padding: '16px 20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                  <div><Label>Contact</Label><FInput value={sel.contact || ''} onChange={v => updatePartner(sel.id, 'contact', v)} placeholder="Name" /></div>
+                  <div><Label>Title</Label><FInput value={sel.contactTitle || ''} onChange={v => updatePartner(sel.id, 'contactTitle', v)} placeholder="Title" /></div>
+                  <div><Label>Phone</Label><FInput value={sel.phone || ''} onChange={v => updatePartner(sel.id, 'phone', v)} placeholder="Phone" /></div>
+                  <div><Label>Email</Label><FInput value={sel.email || ''} onChange={v => updatePartner(sel.id, 'email', v)} placeholder="Email" /></div>
+                </div>
+                <div style={{ marginBottom: 14 }}><Label>Address</Label><FInput value={sel.address || ''} onChange={v => updatePartner(sel.id, 'address', v)} placeholder="Mailing address" /></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+                  <div><Label>Signed</Label><FInput type="date" value={sel.signed || ''} onChange={v => updatePartner(sel.id, 'signed', v)} /></div>
+                  <div><Label>Expires</Label><FInput type="date" value={sel.expires || ''} onChange={v => updatePartner(sel.id, 'expires', v)} /></div>
+                  <div><Label>Review Date</Label><FInput type="date" value={sel.reviewDate || ''} onChange={v => updatePartner(sel.id, 'reviewDate', v)} /></div>
+                </div>
+                <div style={{ marginBottom: 14 }}><Label>Scope of Agreement</Label><FTextarea value={sel.scope || ''} onChange={v => updatePartner(sel.id, 'scope', v)} rows={2} placeholder="What does this agreement cover? Mutual aid capabilities, shared resources..." /></div>
+                <div style={{ marginBottom: 14 }}><Label>Resources Shared</Label><FInput value={sel.resourcesShared || ''} onChange={v => updatePartner(sel.id, 'resourcesShared', v)} placeholder="e.g. Heavy equipment, shelter facilities, personnel" /></div>
+                <div style={{ marginBottom: 14 }}><Label>Activation Trigger</Label><FInput value={sel.activationTrigger || ''} onChange={v => updatePartner(sel.id, 'activationTrigger', v)} placeholder="e.g. Declaration of emergency, mutual aid request" /></div>
+                <div style={{ marginBottom: 14 }}><Label>EMAP Standards</Label><FInput value={sel.emapStandards || ''} onChange={v => updatePartner(sel.id, 'emapStandards', v)} placeholder="e.g. 4.7.1, 4.7.3" /></div>
+                <div style={{ marginBottom: 14 }}><Label>Notes</Label><FTextarea value={sel.notes || ''} onChange={v => updatePartner(sel.id, 'notes', v)} rows={2} placeholder="Additional notes..." /></div>
+                <Attachments
+                  docs={sel.docs || []}
+                  onAdd={doc => updatePartner(sel.id, 'docs', [...(sel.docs || []), doc])}
+                  onRemove={id => updatePartner(sel.id, 'docs', (sel.docs || []).filter(d => d.id !== id))}
+                />
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${B.border}` }}>
+                  <button onClick={() => { remove(sel.id); }} style={{ fontSize: 11, color: B.red, background: 'none', border: `1px solid ${B.redBorder}`, borderRadius: 6, padding: '5px 12px', cursor: 'pointer' }}>Remove Partner</button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -8843,6 +8685,13 @@ function ResourcesView({ data, setData }) {
     fundingSource: '',
     deployable: true,
     assignedTo: '',
+    femaEquipType: '',
+    aelNumber: '',
+    usefulLife: '',
+    federalSharePct: '75',
+    grantProgram: '',
+    make: '',
+    model: '',
   });
   const CATS = [
     'Equipment',
@@ -8895,6 +8744,13 @@ function ResourcesView({ data, setData }) {
       fundingSource: '',
       deployable: true,
       assignedTo: '',
+      femaEquipType: '',
+      aelNumber: '',
+      usefulLife: '',
+      federalSharePct: '75',
+      grantProgram: '',
+      make: '',
+      model: '',
     });
     setShowForm(false);
   };
@@ -9062,7 +8918,25 @@ function ResourcesView({ data, setData }) {
               : ''}
           </p>
         </div>
-        <Btn label="+ Add Resource" onClick={() => setShowForm(true)} primary />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn label="+ Add Resource" onClick={() => setShowForm(true)} primary />
+          {resources.length > 0 && <Btn label="Export All (CSV)" onClick={() => {
+            const headers = ['Name','Make','Model','Serial/Tag','Category','Qty','Location','Condition','Status','AEL Number','FEMA Equipment Type','Acquisition Date','Acquisition Cost','Federal Share %','Grant Program','Useful Life (yrs)','Funding Source','Deployable','Deployed To','Incident'];
+            const rows = resources.map(r => [
+              r.name, r.make || '', r.model || '', r.serialNumber || '', r.category, r.qty,
+              r.location || '', r.condition, r.status, r.aelNumber || '', r.femaEquipType || '',
+              r.acquisitionDate || '', r.acquisitionCost || '', r.federalSharePct || '',
+              r.grantProgram || '', r.usefulLife || '', r.fundingSource || '',
+              r.deployable !== false ? 'Yes' : 'No', r.deployedTo || '', r.deployedIncident || ''
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `resource_inventory_${today()}.csv`;
+            a.click();
+          }} />}
+        </div>
       </div>
       <CoachBanner moduleId="resources" />
 
@@ -9296,6 +9170,58 @@ function ResourcesView({ data, setData }) {
               </FSel>
             </div>
           </div>
+          <div style={{ borderTop: `1px solid ${B.border}`, paddingTop: 12, marginTop: 4, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: B.faint, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>FEMA Reimbursement Info</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <Label>Make</Label>
+                <FInput value={form.make} onChange={(v) => setForm((p) => ({ ...p, make: v }))} placeholder="e.g. Motorola" />
+              </div>
+              <div>
+                <Label>Model</Label>
+                <FInput value={form.model} onChange={(v) => setForm((p) => ({ ...p, model: v }))} placeholder="e.g. APX 8000" />
+              </div>
+              <div>
+                <Label>AEL Number</Label>
+                <FInput value={form.aelNumber} onChange={(v) => setForm((p) => ({ ...p, aelNumber: v }))} placeholder="e.g. 06CP-01-PORT" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+              <div>
+                <Label>FEMA Equipment Type</Label>
+                <FSel value={form.femaEquipType} onChange={(v) => setForm((p) => ({ ...p, femaEquipType: v }))}>
+                  <option value="">Select...</option>
+                  <option value="communications">Communications</option>
+                  <option value="cyber">Cyber Security</option>
+                  <option value="decontam">Decontamination</option>
+                  <option value="detection">Detection</option>
+                  <option value="explosive">Explosive Device</option>
+                  <option value="fire">Fire</option>
+                  <option value="info_tech">Information Technology</option>
+                  <option value="interop">Interoperable Comms</option>
+                  <option value="medical">Medical</option>
+                  <option value="ppe">PPE</option>
+                  <option value="power">Power / Generators</option>
+                  <option value="search_rescue">Search & Rescue</option>
+                  <option value="vehicle">Vehicles</option>
+                  <option value="watercraft">Watercraft</option>
+                  <option value="other">Other</option>
+                </FSel>
+              </div>
+              <div>
+                <Label>Grant Program</Label>
+                <FInput value={form.grantProgram} onChange={(v) => setForm((p) => ({ ...p, grantProgram: v }))} placeholder="e.g. FY24 EMPG" />
+              </div>
+              <div>
+                <Label>Federal Share %</Label>
+                <FInput value={form.federalSharePct} onChange={(v) => setForm((p) => ({ ...p, federalSharePct: v }))} placeholder="75" />
+              </div>
+              <div>
+                <Label>Useful Life (years)</Label>
+                <FInput value={form.usefulLife} onChange={(v) => setForm((p) => ({ ...p, usefulLife: v }))} placeholder="e.g. 5" />
+              </div>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Btn label="Add Resource" onClick={save} primary small />
             <Btn label="Cancel" onClick={() => setShowForm(false)} small />
@@ -9519,6 +9445,27 @@ function ResourcesView({ data, setData }) {
             Track where your deployable assets are right now. Click any resource
             in the Inventory tab to deploy or return it.
           </div>
+          {deployed > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <Btn label="Export Deployed Equipment (CSV)" onClick={() => {
+                const deployedRes = resources.filter(r => r.status === 'deployed');
+                const headers = ['Name','Make','Model','Serial/Tag','Category','Qty','AEL Number','FEMA Equipment Type','Acquisition Cost','Federal Share %','Grant Program','Useful Life (yrs)','Funding Source','Deployed To','Incident','Assigned To','Deploy Date','Condition'];
+                const rows = deployedRes.map(r => [
+                  r.name, r.make || '', r.model || '', r.serialNumber || '', r.category, r.qty,
+                  r.aelNumber || '', r.femaEquipType || '', r.acquisitionCost || '', r.federalSharePct || '',
+                  r.grantProgram || '', r.usefulLife || '', r.fundingSource || '',
+                  r.deployedTo || '', r.deployedIncident || '', r.deployedAssignee || '',
+                  r.deployedDate || '', r.condition
+                ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+                const csv = [headers.join(','), ...rows].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `deployed_equipment_${today()}.csv`;
+                a.click();
+              }} small />
+            </div>
+          )}
           {deployed === 0 ? (
             <Card
               style={{ textAlign: 'center', padding: '32px', color: B.faint }}
@@ -10211,7 +10158,7 @@ function ResourcesView({ data, setData }) {
 /* -------------------------------------------------------
    SIDEBAR
 ------------------------------------------------------- */
-function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
+function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg, collapsed, onToggleCollapse }) {
   const nav = [
     {
       group: '',
@@ -10287,7 +10234,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
       role="navigation"
       aria-label="Main navigation"
       style={{
-        width: 244,
+        width: collapsed ? 64 : 244,
         background: B.sidebar,
         display: 'flex',
         flexDirection: 'column',
@@ -10296,12 +10243,15 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
         left: 0,
         height: '100vh',
         zIndex: 40,
+        transition: 'width 0.2s ease',
+        overflow: 'hidden',
       }}
     >
       <div
         style={{
-          padding: '20px 18px 16px',
+          padding: collapsed ? '16px 12px' : '20px 18px 16px',
           borderBottom: `1px solid ${B.sidebarBorder}`,
+          transition: 'padding 0.2s ease',
         }}
       >
         <div
@@ -10309,7 +10259,8 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
             display: 'flex',
             alignItems: 'center',
             gap: 11,
-            marginBottom: 14,
+            marginBottom: collapsed ? 0 : 14,
+            justifyContent: collapsed ? 'center' : 'flex-start',
           }}
         >
           <div
@@ -10326,9 +10277,9 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
           >
             <BrainIcon size={22} color={B.teal} strokeWidth={1.3} />
           </div>
-          <Wordmark dark size="sm" />
+          {!collapsed && <Wordmark dark size="sm" />}
         </div>
-        <div
+        {!collapsed && <div
           onClick={onEditOrg}
           style={{
             background: B.sidebarMid,
@@ -10419,12 +10370,12 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
               {overall.not_started} todo
             </span>
           </div>
-        </div>
+        </div>}
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '8px 4px' : '8px 0' }}>
         {nav.map((g, gi) => (
           <div key={g.group || 'top'}>
-            {g.group && (
+            {g.group && !collapsed && (
               <div
                 style={{
                   padding: '14px 18px 5px',
@@ -10449,22 +10400,27 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
                 />
               </div>
             )}
+            {g.group && collapsed && gi > 0 && (
+              <div style={{ height: 1, background: B.sidebarBorder, margin: '6px 8px', opacity: 0.4 }} />
+            )}
             {g.items.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setView(item.id)}
+                title={collapsed ? item.label : undefined}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 9,
-                  width: 'calc(100% - 16px)',
-                  margin: '1px 8px',
-                  padding: '8px 12px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  gap: collapsed ? 0 : 9,
+                  width: collapsed ? 'calc(100% - 8px)' : 'calc(100% - 16px)',
+                  margin: collapsed ? '1px 4px' : '1px 8px',
+                  padding: collapsed ? '10px 0' : '8px 12px',
                   borderRadius: 6,
                   background:
                     view === item.id ? 'rgba(27,201,196,0.08)' : 'none',
                   border: 'none',
-                  borderLeft: view === item.id ? `3px solid ${B.teal}` : '3px solid transparent',
+                  borderLeft: collapsed ? 'none' : (view === item.id ? `3px solid ${B.teal}` : '3px solid transparent'),
                   color:
                     view === item.id
                       ? B.teal
@@ -10506,8 +10462,8 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
                     {item.icon}
                   </span>
                 )}
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.ai && view !== item.id && (
+                {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
+                {!collapsed && item.ai && view !== item.id && (
                   <span
                     style={{
                       fontSize: 8,
@@ -10529,16 +10485,16 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
       </div>
       {(() => {
         const plan = getPlanLimits(data.plan || 'solo');
-        const used = data.aiCallsThisMonth || 0;
+        const used = getAIUsageCount();
         const pctUsed = plan.aiCallsPerMonth === Infinity ? 0 : Math.min(100, Math.round((used / plan.aiCallsPerMonth) * 100));
         return (
-          <div style={{ padding: '10px 18px', borderTop: `1px solid ${B.sidebarBorder}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ padding: collapsed ? '8px 10px' : '10px 18px', borderTop: `1px solid ${B.sidebarBorder}` }} title={`AI: ${used}/${plan.aiCallsPerMonth === Infinity ? '∞' : plan.aiCallsPerMonth}`}>
+            {!collapsed && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span style={{ fontSize: 9, color: '#4A5568', textTransform: 'uppercase', letterSpacing: '0.1em' }}>AI Usage</span>
               <span style={{ fontSize: 9, color: pctUsed > 80 ? '#f59e0b' : '#4A5568', fontWeight: 600 }}>
                 {plan.aiCallsPerMonth === Infinity ? `${used} calls` : `${used} / ${plan.aiCallsPerMonth}`}
               </span>
-            </div>
+            </div>}
             {plan.aiCallsPerMonth !== Infinity && (
               <div style={{ height: 3, background: '#2E3439', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{
@@ -10553,19 +10509,27 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg }) {
       })()}
       <div
         style={{
-          padding: '10px 18px',
+          padding: collapsed ? '10px 8px' : '10px 18px',
           borderTop: `1px solid ${B.sidebarBorder}`,
           display: 'flex',
           alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
           gap: 7,
         }}
       >
-        <BrainIcon size={12} color={'#4A5568'} strokeWidth={1} />
-        <span
-          style={{ fontSize: 9, color: '#4A5568', letterSpacing: '0.06em' }}
-        >
-          PLANRR · EMAP EMS 5-2022
-        </span>
+        {!collapsed && <>
+          <BrainIcon size={12} color={'#4A5568'} strokeWidth={1} />
+          <span style={{ fontSize: 9, color: '#4A5568', letterSpacing: '0.06em', flex: 1 }}>PLANRR</span>
+        </>}
+        {onToggleCollapse && (
+          <button onClick={onToggleCollapse} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} style={{
+            background: 'none', border: 'none', color: '#4A5568', cursor: 'pointer', fontSize: 14,
+            padding: '4px', borderRadius: 4, transition: 'color 0.15s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.color = B.teal}
+            onMouseLeave={e => e.currentTarget.style.color = '#4A5568'}
+          >{collapsed ? '»' : '«'}</button>
+        )}
       </div>
     </aside>
   );
@@ -15630,7 +15594,7 @@ function SettingsView({ data, updateData }) {
                 <FInput
                   value={form.orgName}
                   onChange={(v) => setForm((p) => ({ ...p, orgName: v }))}
-                  placeholder="San Joaquin County OES"
+                  placeholder="e.g. County Emergency Management"
                 />
               </div>
               <div>
@@ -15716,7 +15680,7 @@ function SettingsView({ data, updateData }) {
                 <FInput
                   value={form.emName}
                   onChange={(v) => setForm((p) => ({ ...p, emName: v }))}
-                  placeholder="Jane Smith"
+                  placeholder="Full name"
                 />
               </div>
               <div>
@@ -16616,7 +16580,21 @@ function SettingsView({ data, updateData }) {
   );
 }
 
-function Dashboard({ data, setView, orgName }) {
+const DASHBOARD_WIDGETS = {
+  compliance: { label: 'EMAP Compliance', default: true },
+  alerts: { label: 'Alerts & Notifications', default: true },
+  smartQueue: { label: 'Priority Queue', default: true },
+  modules: { label: 'Module Summary Cards', default: true },
+  readiness: { label: 'Program Readiness Checklist', default: false },
+  accredTimeline: { label: 'Time to Accreditation', default: false },
+  nims: { label: 'FEMA/NIMS Alignment', default: false },
+  grantAlignment: { label: 'Grant-EMAP Alignment', default: false },
+};
+
+function Dashboard({ data, setView, orgName, updateData }) {
+  const widgets = data.dashboardWidgets || Object.fromEntries(Object.entries(DASHBOARD_WIDGETS).map(([k, v]) => [k, v.default]));
+  const showWidget = (id) => widgets[id] !== false;
+  const [showWidgetSettings, setShowWidgetSettings] = useState(false);
   const { training, exercises, partners, plans, resources } = data;
   const overall = useMemo(
     () => overallStats(data.standards || {}),
@@ -17017,34 +16995,90 @@ function Dashboard({ data, setView, orgName }) {
 
   return (
     <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 1120 }}>
-      <div style={{ marginBottom: 22 }}>
-        <h1
-          style={{
-            fontSize: 24,
-            fontWeight: 800,
-            color: B.text,
-            letterSpacing: '-0.4px',
-          }}
-        >
-          {orgName || 'Your Program'}
-        </h1>
-        <p style={{ color: B.faint, fontSize: 13, marginTop: 2 }}>
-          EMAP EMS 5-2022 - {data.jurisdiction || ''}
-          {data.jurisdiction && data.state ? '  -  ' : ''}
-          {data.state || ''}
-        </p>
+      <div style={{ marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: B.text, letterSpacing: '-0.4px' }}>
+            {orgName || 'Your Program'}
+          </h1>
+          <p style={{ color: B.faint, fontSize: 13, marginTop: 2 }}>
+            EMAP EMS 5-2022 {data.jurisdiction ? `· ${data.jurisdiction}` : ''} {data.state ? `· ${data.state}` : ''}
+          </p>
+        </div>
+        <button onClick={() => setShowWidgetSettings(p => !p)} style={{
+          background: 'none', border: `1px solid ${B.border}`, borderRadius: 8,
+          padding: '6px 12px', cursor: 'pointer', fontSize: 11, color: B.faint,
+          fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          ◧ Customize
+        </button>
       </div>
+      {showWidgetSettings && (
+        <Card style={{ marginBottom: 16, padding: '16px 20px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: B.text, marginBottom: 12 }}>Dashboard Widgets</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            {Object.entries(DASHBOARD_WIDGETS).map(([id, w]) => (
+              <label key={id} style={{
+                display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: B.muted,
+                cursor: 'pointer', padding: '6px 8px', borderRadius: 6,
+                background: showWidget(id) ? B.tealLight : '#f8f9fa',
+                border: `1px solid ${showWidget(id) ? B.tealBorder : B.border}`,
+              }}>
+                <input type="checkbox" checked={showWidget(id)} onChange={() => {
+                  updateData({ dashboardWidgets: { ...widgets, [id]: !showWidget(id) } });
+                }} style={{ accentColor: B.teal }} />
+                {w.label}
+              </label>
+            ))}
+          </div>
+        </Card>
+      )}
 
-      <div
+      {(plans || []).length === 0 && (exercises || []).length === 0 && updateData && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(27,201,196,0.06), rgba(194,150,74,0.06))',
+          border: `1px solid ${B.border}`, borderRadius: 14, padding: '24px 28px', marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: B.text, marginBottom: 4 }}>
+            Quick Start — Load a Starter Pack
+          </div>
+          <div style={{ fontSize: 13, color: B.faint, marginBottom: 16, lineHeight: 1.6 }}>
+            Get up and running fast with pre-built plans, exercises, and training tailored to your agency type. Everything is customizable.
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {Object.values(STARTER_PACKS).map(pack => (
+              <button key={pack.id} onClick={() => {
+                if (window.confirm(`Load "${pack.name}"?\n\nThis adds ${pack.plans.length} plans with templates, ${pack.exercises.length} exercises, and ${pack.training.length} training records.`)) {
+                  updateData(prev => applyStarterPack(prev, pack.id));
+                }
+              }} style={{
+                background: B.card, border: `1px solid ${B.border}`, borderRadius: 10,
+                padding: '16px 20px', cursor: 'pointer', textAlign: 'left', flex: '1 1 240px',
+                transition: 'all 0.15s', minWidth: 240,
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = B.teal; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = B.border; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 8 }}>{pack.icon}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: B.text, marginBottom: 4 }}>{pack.name}</div>
+                <div style={{ fontSize: 12, color: B.faint, lineHeight: 1.5, marginBottom: 10 }}>{pack.description}</div>
+                <div style={{ fontSize: 11, color: B.teal, fontWeight: 600 }}>
+                  {pack.plans.length} plans · {pack.exercises.length} exercises · {pack.training.length} training
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(showWidget('compliance') || showWidget('alerts') || showWidget('readiness')) && <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '200px 1fr 280px',
+          gridTemplateColumns: showWidget('compliance') && showWidget('readiness') ? '200px 1fr 280px' : showWidget('compliance') ? '200px 1fr' : '1fr',
           gap: 16,
           marginBottom: 20,
         }}
       >
-        {/* EMAP donut */}
-        <Card
+        {showWidget('compliance') && <Card
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -17115,8 +17149,8 @@ function Dashboard({ data, setView, orgName }) {
           </div>
         </Card>
 
-        {/* Notifications */}
-        <div>
+        }
+        {showWidget('alerts') && <div>
           {notifications.length === 0 ? (
             <Card
               style={{
@@ -17234,8 +17268,8 @@ function Dashboard({ data, setView, orgName }) {
           )}
         </div>
 
-        {/* Readiness checklist */}
-        <Card
+        }
+        {showWidget('readiness') && <Card
           style={{
             background: `linear-gradient(135deg,${B.sidebar}f8,${B.sidebar})`,
             borderColor: B.sidebarBorder,
@@ -17371,20 +17405,19 @@ function Dashboard({ data, setView, orgName }) {
             {checkDone}/{checklist.length} items complete - click any to jump
             there
           </div>
-        </Card>
-      </div>
+        </Card>}
+      </div>}
 
-      {/* NEW: Next Up Smart Queue + Time-to-Accreditation + FEMA/NIMS Badge */}
-      <div
+      {/* Next Up Smart Queue + Time-to-Accreditation + FEMA/NIMS Badge */}
+      {(showWidget('smartQueue') || showWidget('accredTimeline') || showWidget('nims')) && <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 280px 220px',
+          gridTemplateColumns: showWidget('accredTimeline') && showWidget('nims') ? '1fr 280px 220px' : showWidget('accredTimeline') || showWidget('nims') ? '1fr 280px' : '1fr',
           gap: 14,
           marginBottom: 16,
         }}
       >
-        {/* NEXT UP SMART QUEUE */}
-        <Card style={{ padding: '16px 18px' }}>
+        {showWidget('smartQueue') && <Card style={{ padding: '16px 18px' }}>
           <div
             style={{
               display: 'flex',
@@ -17514,10 +17547,9 @@ function Dashboard({ data, setView, orgName }) {
               ))}
             </div>
           )}
-        </Card>
+        </Card>}
 
-        {/* TIME-TO-ACCREDITATION ESTIMATOR */}
-        <Card
+        {showWidget('accredTimeline') && <Card
           style={{
             background: `linear-gradient(135deg,${B.sidebar}f8,${B.sidebar})`,
             borderColor: B.sidebarBorder,
@@ -17612,9 +17644,9 @@ function Dashboard({ data, setView, orgName }) {
               credibility.
             </div>
           </div>
-        </Card>
+        </Card>}
 
-        {/* FEMA/NIMS ALIGNMENT BADGE */}
+        {showWidget('nims') &&
         <Card
           style={{
             padding: '16px 18px',
@@ -17716,11 +17748,11 @@ function Dashboard({ data, setView, orgName }) {
           >
             ICS/NIMS (4.6) + Training (4.10) + Comms (4.8)
           </div>
-        </Card>
-      </div>
+        </Card>}
+      </div>}
 
-      {/* NEW: Grant-EMAP Alignment (only show if grants exist) */}
-      {grantAlignments.length > 0 && (
+      {/* Grant-EMAP Alignment */}
+      {showWidget('grantAlignment') && grantAlignments.length > 0 && (
         <Card style={{ marginBottom: 16, padding: '16px 18px' }}>
           <div
             style={{
@@ -17812,7 +17844,7 @@ function Dashboard({ data, setView, orgName }) {
       )}
 
       {/* Module cards */}
-      <div
+      {showWidget('modules') && <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3,1fr)',
@@ -17891,7 +17923,7 @@ function Dashboard({ data, setView, orgName }) {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* EMAP section progress + recent activity */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -18142,8 +18174,12 @@ function BulkIntake({ data, updateData }) {
       try {
         const fd = await readFileData(file);
         const content = [];
-        const prompt = `Analyze this document and map it to EMAP EMS 5-2022 standards for PLANRR.\nDocument: "${file.name}"\nReturn ONLY valid JSON, no other text:\n{"docType":"brief description","mappings":[{"stdId":"3.1.1","confidence":85,"status":"compliant","reason":"One sentence explanation"}]}\nMap to every relevant standard. Status options: compliant, in_progress, needs_review.`;
-        if (fd.type === 'pdf') {
+        const stdRef = ALL_SECTIONS.map(sec =>
+          `${sec.id} ${sec.title}: ${sec.standards.map(s => `${s.id} - ${s.text.slice(0, 80)}`).join('; ')}`
+        ).join('\n');
+        const prompt = `Analyze this document and map it to the CORRECT EMAP EMS 5-2022 standards.\nDocument: "${file.name}"\n\nEMAP STANDARD REFERENCE (use these EXACT IDs):\n${stdRef}\n\nIMPORTANT: Match based on document content to the standard descriptions above. For example:\n- MOUs/agreements → 4.7.x (Mutual Aid)\n- Training records → 4.10.x (Training & Education)\n- Exercise AARs → 4.11.x (Exercises, Evaluations & Corrective Actions)\n- EOPs → 4.5.x (Operational Planning)\n- COOPs → 4.4.x (Continuity Planning)\n- Budget/funding docs → 3.4.x (Administration & Finance)\n- Hazard analysis → 4.1.x (Hazard ID & Risk Assessment)\n\nReturn ONLY valid JSON:\n{"docType":"brief description","mappings":[{"stdId":"4.7.1","confidence":85,"status":"in_progress","reason":"One sentence explanation"}]}`;
+        const isLargePdf = fd.type === 'pdf' && fd.data.length > 500000;
+        if (fd.type === 'pdf' && !isLargePdf) {
           content.push({
             type: 'document',
             source: {
@@ -18153,6 +18189,20 @@ function BulkIntake({ data, updateData }) {
             },
           });
           content.push({ type: 'text', text: prompt });
+        } else if (fd.type === 'pdf' && isLargePdf) {
+          try {
+            const { extractTextFromPdf } = await import('./services/pdfExtract');
+            const extracted = await extractTextFromPdf(file);
+            content.push({
+              type: 'text',
+              text: `Document "${file.name}" (${extracted.totalPages} pages${extracted.truncated ? ', truncated' : ''}):\n${extracted.text}\n\n${prompt}`,
+            });
+          } catch {
+            content.push({
+              type: 'text',
+              text: `[PDF "${file.name}" - could not extract text, analyzing by filename]\n\n${prompt}`,
+            });
+          }
         } else if (fd.type === 'image') {
           content.push({
             type: 'image',
@@ -18162,7 +18212,7 @@ function BulkIntake({ data, updateData }) {
         } else {
           content.push({
             type: 'text',
-            text: `Document:\n${fd.data}\n\n${prompt}`,
+            text: `Document "${file.name}":\n${fd.data.slice(0, 15000)}\n\n${prompt}`,
           });
         }
         const res = await fetch(
@@ -24274,7 +24324,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="email"
                 value={fe}
                 onChange={(e) => setFe(e.target.value)}
-                placeholder="you@county.gov"
+                placeholder="you@agency.gov"
                 style={iS}
                 required
               />
@@ -24365,7 +24415,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="email"
                 value={fe}
                 onChange={(e) => setFe(e.target.value)}
-                placeholder="you@county.gov"
+                placeholder="you@agency.gov"
                 style={iS}
                 required
               />
@@ -24374,7 +24424,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="text"
                 value={fo}
                 onChange={(e) => setFo(e.target.value)}
-                placeholder="San Joaquin County OES"
+                placeholder="e.g. County Emergency Management"
                 style={iS}
                 required
               />
@@ -24454,7 +24504,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 type="email"
                 value={fe}
                 onChange={(e) => setFe(e.target.value)}
-                placeholder="you@county.gov"
+                placeholder="you@agency.gov"
                 style={iS}
                 required
               />
@@ -25266,7 +25316,7 @@ function Onboarding({ onComplete }) {
           <FInput
             value={name}
             onChange={setName}
-            placeholder="e.g. San Joaquin County OES"
+            placeholder="e.g. County Emergency Management"
           />
         </div>
         <div
@@ -25506,6 +25556,16 @@ function AppInner() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [firstRun, setFirstRun] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('planrr_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+  const toggleCollapse = () => {
+    setSidebarCollapsed(p => {
+      const next = !p;
+      try { localStorage.setItem('planrr_sidebar_collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
   const saveTimer = useRef(null);
   const refreshTimer = useRef(null);
 
@@ -25758,13 +25818,15 @@ function AppInner() {
           className="planrr-sidebar-overlay"
         />
       )}
-      <div id="planrr-sidebar" className={sidebarOpen ? 'open' : ''}>
+      <div id="planrr-sidebar" className={sidebarOpen ? 'open' : ''} style={sidebarCollapsed ? { width: 64 } : undefined}>
         <Sidebar
           view={view}
           setView={(v) => { setView(v); setSidebarOpen(false); }}
           data={data}
           notifCount={notifications.length}
           orgName={data.orgName}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleCollapse}
           onEditOrg={() => {
             const n = prompt('Organization name:', data.orgName);
             if (n) updateData((p) => ({ ...p, orgName: n }));
@@ -25774,12 +25836,13 @@ function AppInner() {
       <div
         id="planrr-main"
         style={{
-          marginLeft: 244,
+          marginLeft: sidebarCollapsed ? 64 : 244,
           flex: 1,
           minHeight: '100vh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'stretch',
+          transition: 'margin-left 0.2s ease',
         }}
       >
         <div
@@ -26053,7 +26116,7 @@ function AppInner() {
             />
           )}
           {view === 'dashboard' && (
-            <Dashboard data={data} setView={setView} orgName={data.orgName} />
+            <Dashboard data={data} setView={setView} orgName={data.orgName} updateData={updateData} />
           )}
           {view === 'accreditation' && (
             <AccreditationView data={data} updateData={updateData} />
