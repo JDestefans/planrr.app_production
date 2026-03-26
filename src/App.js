@@ -24287,6 +24287,23 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
     try {
       await sbSignUp(fe, fp, fo.trim(), fn.trim(), fj, fs);
       await sbSignIn(fe, fp);
+      try {
+        const session = JSON.parse(localStorage.getItem('sb_session') || '{}');
+        const meta = session?.user?.user_metadata || {};
+        const stds = {};
+        ALL_STANDARDS.forEach((s) => { stds[s.id] = initRecord(); });
+        const seedData = {
+          ...initData(),
+          orgName: meta.org_name || fo.trim() || '',
+          emName: meta.full_name || fn.trim() || '',
+          emEmail: fe || '',
+          jurisdiction: meta.jurisdiction || '',
+          state: meta.state || '',
+          standards: stds,
+          welcomeDismissed: false,
+        };
+        await saveData(seedData);
+      } catch {}
       onAuth();
       return;
     } catch (x) {
@@ -24476,6 +24493,14 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
                 14 days free. Cancel anytime.
               </div>
+              <label style={lS}>Your name</label>
+              <input
+                type="text"
+                value={fn}
+                onChange={(e) => setFn(e.target.value)}
+                placeholder="Full name"
+                style={iS}
+              />
               <label style={lS}>Work email</label>
               <input
                 type="email"
