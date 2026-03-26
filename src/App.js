@@ -179,14 +179,25 @@ function ViewSkeleton() {
   );
 }
 
-const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2 }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-    <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke={color} strokeWidth={strokeWidth} fill="none" />
-    <g transform="translate(5.995,23) scale(0.017,-0.017)">
-      <path d="M302 165V340H801Q831 340 851.5 349.5Q872 359 872 390Q872 422 851.5 431.0Q831 440 801 440H318V0H68V640H762Q837 640 902.5 629.5Q968 619 1017.0 592.0Q1066 565 1094.0 516.0Q1122 467 1122 390Q1122 313 1094.0 268.0Q1066 223 1017.0 201.0Q968 179 902.5 172.0Q837 165 762 165Z" fill={color} />
-    </g>
-  </svg>
-);
+const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2, gradient = false }) => {
+  const id = 'pg' + Math.random().toString(36).slice(2, 6);
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      {gradient && (
+        <defs>
+          <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={B.teal} />
+            <stop offset="100%" stopColor={GOLD} />
+          </linearGradient>
+        </defs>
+      )}
+      <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke={gradient ? `url(#${id})` : color} strokeWidth={strokeWidth} fill="none" />
+      <g transform="translate(5.995,23) scale(0.017,-0.017)">
+        <path d="M302 165V340H801Q831 340 851.5 349.5Q872 359 872 390Q872 422 851.5 431.0Q831 440 801 440H318V0H68V640H762Q837 640 902.5 629.5Q968 619 1017.0 592.0Q1066 565 1094.0 516.0Q1122 467 1122 390Q1122 313 1094.0 268.0Q1066 223 1017.0 201.0Q968 179 902.5 172.0Q837 165 762 165Z" fill={gradient ? `url(#${id})` : color} />
+      </g>
+    </svg>
+  );
+};
 
 const Wordmark = ({ dark = false, size = 'md' }) => {
   const sizes = {
@@ -10288,7 +10299,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg, collapse
               flexShrink: 0,
             }}
           >
-            <BrainIcon size={22} color={B.teal} strokeWidth={1.3} />
+            <BrainIcon size={22} gradient strokeWidth={1.3} />
           </div>
           {!collapsed && <Wordmark dark size="sm" />}
         </div>
@@ -24276,6 +24287,23 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
     try {
       await sbSignUp(fe, fp, fo.trim(), fn.trim(), fj, fs);
       await sbSignIn(fe, fp);
+      try {
+        const session = JSON.parse(localStorage.getItem('sb_session') || '{}');
+        const meta = session?.user?.user_metadata || {};
+        const stds = {};
+        ALL_STANDARDS.forEach((s) => { stds[s.id] = initRecord(); });
+        const seedData = {
+          ...initData(),
+          orgName: meta.org_name || fo.trim() || '',
+          emName: meta.full_name || fn.trim() || '',
+          emEmail: fe || '',
+          jurisdiction: meta.jurisdiction || '',
+          state: meta.state || '',
+          standards: stds,
+          welcomeDismissed: false,
+        };
+        await saveData(seedData);
+      } catch {}
       onAuth();
       return;
     } catch (x) {
@@ -24301,7 +24329,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 10 }}>
           <div style={{ background: 'rgba(27,201,196,0.1)', borderRadius: 14, padding: '10px', border: '1px solid rgba(27,201,196,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BrainIcon size={24} color={B.teal} strokeWidth={1.3} />
+            <BrainIcon size={24} gradient strokeWidth={1.3} />
           </div>
           <Wordmark dark size="md" />
         </div>
@@ -24465,6 +24493,14 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
                 14 days free. Cancel anytime.
               </div>
+              <label style={lS}>Your name</label>
+              <input
+                type="text"
+                value={fn}
+                onChange={(e) => setFn(e.target.value)}
+                placeholder="Full name"
+                style={iS}
+              />
               <label style={lS}>Work email</label>
               <input
                 type="email"
@@ -25357,7 +25393,7 @@ function Onboarding({ onComplete }) {
                 justifyContent: 'center',
               }}
             >
-              <BrainIcon size={28} color={B.teal} strokeWidth={1.3} />
+              <BrainIcon size={28} gradient strokeWidth={1.3} />
             </div>
             <Wordmark size="lg" />
           </div>
@@ -25603,6 +25639,7 @@ function AppInner() {
   }, [navigate]);
   const [onboarding, setOnboarding] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [subStatus, setSubStatus] = useState(null); // null=loading, 'active'|'trialing'|'none'
   const [searchOpen, setSearchOpen] = useState(false);
   const [authed, setAuthed] = useState(() => {
     const status = isLoggedIn();
@@ -25655,6 +25692,27 @@ function AppInner() {
     if (!authed) {
       setLoaded(true);
       return;
+    }
+    const token = getAccessToken();
+    if (token) {
+      fetch(SB_URL + '/rest/v1/subscriptions?select=status,trial_end,current_period_end&limit=1', {
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      }).then(r => r.ok ? r.json() : []).then(rows => {
+        if (rows.length > 0) {
+          const s = rows[0];
+          if (s.status === 'active' || s.status === 'trialing') {
+            setSubStatus(s.status);
+          } else if (s.status === 'past_due' || s.status === 'canceled') {
+            setSubStatus('expired');
+          } else {
+            setSubStatus(s.status || 'none');
+          }
+        } else {
+          setSubStatus('none');
+        }
+      }).catch(() => setSubStatus('none'));
+    } else {
+      setSubStatus('none');
     }
     loadData().then((d) => {
       if (d) {
@@ -25837,7 +25895,7 @@ function AppInner() {
             border: '1px solid rgba(255,255,255,0.08)',
           }}
         >
-          <BrainIcon size={34} color={B.teal} strokeWidth={1.2} />
+          <BrainIcon size={34} gradient strokeWidth={1.2} />
         </div>
         <Wordmark dark size="md" />
         <div style={{ color: B.sidebarMuted, fontSize: 12 }}>
@@ -25847,6 +25905,56 @@ function AppInner() {
     );
   if (onboarding)
     return <Onboarding onComplete={handleOnboard} />;
+  if (subStatus === 'none' || subStatus === 'expired') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', background: B.sidebar, flexDirection: 'column', gap: 16,
+        fontFamily: "'DM Sans',sans-serif", padding: 20,
+      }}>
+        <BrainIcon size={40} gradient strokeWidth={1.2} />
+        <Wordmark dark size="lg" />
+        <div style={{ maxWidth: 400, textAlign: 'center', marginTop: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#f0f4fa', marginBottom: 8 }}>
+            {subStatus === 'expired' ? 'Your subscription has ended' : 'Choose a plan to get started'}
+          </div>
+          <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.7, marginBottom: 24 }}>
+            {subStatus === 'expired'
+              ? 'Your subscription is no longer active. Resubscribe to continue using planrr.app. Your data is safe and waiting.'
+              : 'Start your 14-day free trial to access all features. No credit card required upfront — cancel anytime.'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[
+              { label: 'Solo Operator — $79/mo', plan: 'solo' },
+              { label: 'Small Team — $149/mo', plan: 'small_team' },
+              { label: 'Full Program — $199/mo', plan: 'full_program' },
+            ].map(p => (
+              <button key={p.plan} onClick={() => {
+                const link = STRIPE_BUY_LINKS[p.plan];
+                if (link) {
+                  try {
+                    const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
+                    const email = s?.user?.email || '';
+                    window.location.href = email ? `${link}?prefilled_email=${encodeURIComponent(email)}` : link;
+                  } catch { window.location.href = link; }
+                }
+              }} style={{
+                background: p.plan === 'small_team' ? GOLD : 'rgba(255,255,255,0.06)',
+                color: p.plan === 'small_team' ? '#141719' : '#f0f4fa',
+                border: p.plan === 'small_team' ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 10, padding: '14px 20px', fontSize: 14, fontWeight: 700,
+                cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", transition: 'all 0.15s',
+              }}>{p.label}{p.plan === 'small_team' ? ' — Most Popular' : ''}</button>
+            ))}
+          </div>
+          <button onClick={sbSignOut} style={{
+            background: 'none', border: 'none', color: '#64748b', fontSize: 12,
+            cursor: 'pointer', marginTop: 16, padding: '4px 8px',
+          }}>Sign out</button>
+        </div>
+      </div>
+    );
+  }
   const checkoutSuccess = new URLSearchParams(window.location.search).get('checkout') === 'success';
   const notifications = buildNotifications(data);
   return (
