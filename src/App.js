@@ -180,14 +180,6 @@ function ViewSkeleton() {
   );
 }
 
-const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-    <rect width="100" height="100" rx="18" fill={B.sidebar} />
-    <rect width="100" height="100" rx="18" fill="none" stroke={color} strokeWidth={strokeWidth * 3} />
-    <path d="M20 75 L20 20 L62 20 C73 20 80 28 80 38 C80 48 73 56 62 56 L32 56 L32 75 Z" fill={color} />
-    <path d="M32 30 L58 30 C64 30 68 33 68 36.5 C68 40 64 43 58 43 L32 43 Z" fill={B.sidebar} />
-  </svg>
-);
 const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2, gradient = false }) => {
   const id = 'pg' + Math.random().toString(36).slice(2, 6);
   return (
