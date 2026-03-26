@@ -36,7 +36,7 @@ class ErrorBoundary extends Component {
           <button
             onClick={() => window.location.reload()}
             style={{
-              marginTop: 8, background: '#c2964a', color: '#141719', border: 'none',
+              marginTop: 8, background: GOLD, color: '#141719', border: 'none',
               padding: '10px 24px', borderRadius: 6, fontSize: 14, fontWeight: 700, cursor: 'pointer',
             }}
           >
@@ -78,21 +78,21 @@ const VIEW_TITLES = {
 
 /* --- BRAND (fixed contrast) --------------------------- */
 const B = {
-  teal: '#1BC9C4',
-  tealDark: '#13A8A4',
+  teal: '#3ECFCF',
+  tealDark: '#2BAEAE',
   tealLight: '#E6FAFA',
-  tealBorder: '#9EECEA',
+  tealBorder: 'rgba(62,207,207,0.28)',
   bg: '#F2F5F7',
   card: '#FFFFFF',
   border: '#E2E8EA',
   text: '#111827',
   muted: '#374151',
-  faint: '#6B7280', // - fixed contrast
-  sidebar: '#1C1F22',
-  sidebarMid: '#252A2E',
-  sidebarBorder: '#2E3439',
+  faint: '#6B7280',
+  sidebar: '#1A1F2E',
+  sidebarMid: '#242B3D',
+  sidebarBorder: '#2A3550',
   sidebarMuted: '#94A3B8',
-  green: '#10B981',
+  green: '#22C55E',
   greenLight: '#ECFDF5',
   greenBorder: '#A7F3D0',
   amber: '#F59E0B',
@@ -144,7 +144,7 @@ const ST = {
 };
 
 /* --- WORDMARK + PLACEHOLDER MARK ---------------------- */
-const GOLD = '#c2964a';
+const GOLD = '#C49A3C';
 
 /* --- LOADING SKELETON --------------------------------- */
 function Skeleton({ width, height = 14, style }) {
@@ -179,25 +179,14 @@ function ViewSkeleton() {
   );
 }
 
-const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2, gradient = false }) => {
-  const id = 'pg' + Math.random().toString(36).slice(2, 6);
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      {gradient && (
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={B.teal} />
-            <stop offset="100%" stopColor={GOLD} />
-          </linearGradient>
-        </defs>
-      )}
-      <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke={gradient ? `url(#${id})` : color} strokeWidth={strokeWidth} fill="none" />
-      <g transform="translate(5.995,23) scale(0.017,-0.017)">
-        <path d="M302 165V340H801Q831 340 851.5 349.5Q872 359 872 390Q872 422 851.5 431.0Q831 440 801 440H318V0H68V640H762Q837 640 902.5 629.5Q968 619 1017.0 592.0Q1066 565 1094.0 516.0Q1122 467 1122 390Q1122 313 1094.0 268.0Q1066 223 1017.0 201.0Q968 179 902.5 172.0Q837 165 762 165Z" fill={gradient ? `url(#${id})` : color} />
-      </g>
-    </svg>
-  );
-};
+const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+    <rect width="100" height="100" rx="18" fill={B.sidebar} />
+    <rect width="100" height="100" rx="18" fill="none" stroke={color} strokeWidth={strokeWidth * 3} />
+    <path d="M20 75 L20 20 L62 20 C73 20 80 28 80 38 C80 48 73 56 62 56 L32 56 L32 75 Z" fill={color} />
+    <path d="M32 30 L58 30 C64 30 68 33 68 36.5 C68 40 64 43 58 43 L32 43 Z" fill={B.sidebar} />
+  </svg>
+);
 
 const Wordmark = ({ dark = false, size = 'md' }) => {
   const sizes = {
@@ -10299,7 +10288,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg, collapse
               flexShrink: 0,
             }}
           >
-            <BrainIcon size={22} gradient strokeWidth={1.3} />
+            <BrainIcon size={22} strokeWidth={1.3} />
           </div>
           {!collapsed && <Wordmark dark size="sm" />}
         </div>
@@ -24083,7 +24072,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                   onMouseEnter={e => e.currentTarget.style.color = GOLD}
                   onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
                 >Founder</Link>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>hello@planrr.app</div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>helloplanrr.app@gmail.com</div>
               </div>
             </div>
           </div>
@@ -24329,7 +24318,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 10 }}>
           <div style={{ background: 'rgba(27,201,196,0.1)', borderRadius: 14, padding: '10px', border: '1px solid rgba(27,201,196,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BrainIcon size={24} gradient strokeWidth={1.3} />
+            <BrainIcon size={24} strokeWidth={1.3} />
           </div>
           <Wordmark dark size="md" />
         </div>
@@ -24710,7 +24699,7 @@ function FirstRunWelcome({ onDone, setView }) {
             style={{
               height: '100%',
               width: `${pct}%`,
-              background: `linear-gradient(90deg, ${B.teal}, #c2964a)`,
+              background: `linear-gradient(90deg, ${B.teal}, GOLD)`,
               borderRadius: 2,
               transition: 'width 0.4s ease',
             }}
@@ -24840,7 +24829,7 @@ function FirstRunWelcome({ onDone, setView }) {
                     style={{
                       fontSize: 14,
                       fontWeight: 700,
-                      color: '#c2964a',
+                      color: GOLD,
                       marginBottom: 4,
                     }}
                   >
@@ -24975,7 +24964,7 @@ function FirstRunWelcome({ onDone, setView }) {
                   },
                   {
                     phase: 'Build',
-                    color: '#c2964a',
+                    color: GOLD,
                     icon: '🔨',
                     items: [
                       'Staff & credential your people',
@@ -25393,7 +25382,7 @@ function Onboarding({ onComplete }) {
                 justifyContent: 'center',
               }}
             >
-              <BrainIcon size={28} gradient strokeWidth={1.3} />
+              <BrainIcon size={28} strokeWidth={1.3} />
             </div>
             <Wordmark size="lg" />
           </div>
@@ -25895,7 +25884,7 @@ function AppInner() {
             border: '1px solid rgba(255,255,255,0.08)',
           }}
         >
-          <BrainIcon size={34} gradient strokeWidth={1.2} />
+          <BrainIcon size={34} strokeWidth={1.2} />
         </div>
         <Wordmark dark size="md" />
         <div style={{ color: B.sidebarMuted, fontSize: 12 }}>
@@ -25912,7 +25901,7 @@ function AppInner() {
         height: '100vh', background: B.sidebar, flexDirection: 'column', gap: 16,
         fontFamily: "'DM Sans',sans-serif", padding: 20,
       }}>
-        <BrainIcon size={40} gradient strokeWidth={1.2} />
+        <BrainIcon size={40} strokeWidth={1.2} />
         <Wordmark dark size="lg" />
         <div style={{ maxWidth: 400, textAlign: 'center', marginTop: 8 }}>
           <div style={{ fontSize: 20, fontWeight: 800, color: '#f0f4fa', marginBottom: 8 }}>
