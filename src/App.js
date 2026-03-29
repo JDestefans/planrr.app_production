@@ -181,14 +181,18 @@ function ViewSkeleton() {
   );
 }
 
-const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-    <rect width="100" height="100" rx="18" fill={B.sidebar} />
-    <rect width="100" height="100" rx="18" fill="none" stroke={color} strokeWidth={strokeWidth * 3} />
-    <path d="M20 75 L20 20 L62 20 C73 20 80 28 80 38 C80 48 73 56 62 56 L32 56 L32 75 Z" fill={color} />
-    <path d="M32 30 L58 30 C64 30 68 33 68 36.5 C68 40 64 43 58 43 L32 43 Z" fill={B.sidebar} />
-  </svg>
-);
+const BrainIcon = ({ size = 28, color = B.teal, strokeWidth = 1.2, bgColor }) => {
+  const bg = bgColor || B.sidebar;
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <rect width="100" height="100" rx="18" fill={bg} />
+      <rect width="100" height="100" rx="18" fill="none" stroke={color} strokeWidth={strokeWidth * 3} />
+      {/* P icon: short stem, wide bowl at TOP, thin slot cutout */}
+      <path d="M20 78 L20 20 L66 20 C80 20 86 30 86 40 C86 50 80 58 66 58 L32 58 L32 78 Z" fill={color} />
+      <path d="M32 30 L58 30 C64 30 68 34 68 38 C68 42 64 46 58 46 L32 46 Z" fill={bg} />
+    </svg>
+  );
+};
 
 const Wordmark = ({ dark = false, size = 'md' }) => {
   const sizes = {
@@ -22832,1395 +22836,894 @@ function RecoveryPlanningView({ data, setData }) {
 
 function LandingPage({ onLogin, onSignup, onBuyPlan }) {
   const [mobileNav, setMobileNav] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const platformRef = useRef(null);
   const pillarsRef = useRef(null);
   const pricingRef = useRef(null);
   const securityRef = useRef(null);
+  const canvasRef = useRef(null);
+  const animRef = useRef(null);
+
   const scrollToSection = useCallback((ref) => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setMobileNav(false);
   }, []);
+
+  // Sticky nav scroll listener
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Animated node network canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let W, H, nodes;
+
+    const resize = () => {
+      W = canvas.width = canvas.offsetWidth;
+      H = canvas.height = canvas.offsetHeight;
+      const count = Math.floor((W * H) / 14000);
+      nodes = Array.from({ length: count }, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.22, vy: (Math.random() - 0.5) * 0.22,
+        r: Math.random() * 1.5 + 0.6,
+        gold: Math.random() < 0.12,
+      }));
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H);
+      const MAX = 115;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < MAX) {
+            ctx.strokeStyle = `rgba(62,207,207,${(1 - dist / MAX) * 0.11})`;
+            ctx.lineWidth = 0.3;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+      nodes.forEach(n => {
+        ctx.fillStyle = n.gold ? 'rgba(196,154,60,0.22)' : 'rgba(62,207,207,0.19)';
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > W) n.vx *= -1;
+        if (n.y < 0 || n.y > H) n.vy *= -1;
+      });
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    resize();
+    draw();
+    window.addEventListener('resize', resize);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  const TEAL = '#3ECFCF';
+  const cardBase = {
+    background: 'rgba(20,23,25,0.82)',
+    border: '1px solid rgba(62,207,207,0.12)',
+    padding: '28px 24px',
+    position: 'relative',
+    transition: 'border-color 0.2s, transform 0.2s',
+    overflow: 'hidden',
+  };
+  const tealAccent = {
+    position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+    background: TEAL,
+    borderRadius: '3px 0 0 3px',
+  };
+
   return (
-    <div
-      style={{
-        fontFamily: 'DM Sans,sans-serif',
-        background: '#1C1F22',
-        minHeight: '100vh',
-        color: '#f0f4fa',
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='20' cy='20' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='60' cy='10' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='100' cy='30' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='40' cy='60' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='80' cy='50' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='10' cy='90' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='60' cy='100' r='1.5' fill='rgba(194,150,74,0.08)'/%3E%3Ccircle cx='100' cy='80' r='1' fill='rgba(194,150,74,0.06)'/%3E%3Ccircle cx='110' cy='110' r='1.5' fill='rgba(194,150,74,0.07)'/%3E%3Cline x1='20' y1='20' x2='60' y2='10' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='10' x2='100' y2='30' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='20' y1='20' x2='40' y2='60' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='80' y2='50' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='100' y1='30' x2='80' y2='50' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='40' y1='60' x2='10' y2='90' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='10' y1='90' x2='60' y2='100' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='80' y1='50' x2='100' y2='80' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='100' y2='80' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='100' y1='80' x2='110' y2='110' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3Cline x1='60' y1='100' x2='110' y2='110' stroke='rgba(194,150,74,0.04)' stroke-width='0.5'/%3E%3C/svg%3E")`,
-      }}
-    >
-      <style>{`@media(max-width:768px){.planrr-pricing-grid{grid-template-columns:1fr!important}.planrr-features-grid{grid-template-columns:1fr!important}.planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}.planrr-security-grid{grid-template-columns:1fr!important}.planrr-landing-header{padding:14px 16px!important}.planrr-landing-hero{padding:48px 20px 40px!important}.planrr-landing-section{padding:48px 20px!important}.planrr-header-actions{display:none!important}.planrr-mobile-menu-btn{display:flex!important}.planrr-quick-nav{padding:10px 16px!important;overflow:auto!important}}@media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}`}</style>
-      {/* Header */}
+    <div style={{
+      fontFamily: "'DM Sans',sans-serif",
+      background: '#111111',
+      minHeight: '100vh',
+      color: '#f0f4fa',
+      position: 'relative',
+      overflowX: 'hidden',
+    }}>
+      {/* Animated node canvas background */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0,
+          opacity: 0.75,
+        }}
+      />
+
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        .planrr-hero-fade{animation:fadeUp 0.7s ease both}
+        .planrr-hero-fade-2{animation:fadeUp 0.7s 0.12s ease both}
+        .planrr-hero-fade-3{animation:fadeUp 0.7s 0.22s ease both}
+        .planrr-hero-fade-4{animation:fadeUp 0.7s 0.32s ease both}
+        .planrr-card:hover{border-color:rgba(62,207,207,0.35)!important;transform:translateY(-2px);}
+        .planrr-card-gold:hover{border-color:rgba(196,154,60,0.4)!important;transform:translateY(-2px);}
+        .planrr-nav-link{background:none;border:none;font-family:'DM Mono',monospace;font-size:10px;color:#64748b;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;padding:6px 10px;transition:color .15s;}
+        .planrr-nav-link:hover{color:#C49A3C;}
+        @media(max-width:768px){
+          .planrr-pricing-grid{grid-template-columns:1fr!important}
+          .planrr-features-grid{grid-template-columns:1fr!important}
+          .planrr-stats-strip{grid-template-columns:repeat(2,1fr)!important}
+          .planrr-security-grid{grid-template-columns:1fr!important}
+          .planrr-landing-header{padding:14px 16px!important}
+          .planrr-landing-hero{padding:48px 20px 40px!important}
+          .planrr-landing-section{padding:48px 20px!important}
+          .planrr-header-actions{display:none!important}
+          .planrr-mobile-menu-btn{display:flex!important}
+          .planrr-quick-nav{padding:10px 16px!important;overflow:auto!important}
+        }
+        @media(max-width:480px){.planrr-stats-strip{grid-template-columns:1fr!important}}
+      `}</style>
+
+      {/* ── STICKY HEADER ── */}
       <div
         className="planrr-landing-header"
         style={{
-          borderBottom: '1px solid rgba(194,150,74,0.22)',
-          padding: '14px 40px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'rgba(20,23,25,0.92)',
-          backdropFilter: 'blur(10px)',
+          position: 'sticky', top: 0, zIndex: 50,
+          borderBottom: `1px solid ${scrolled ? 'rgba(196,154,60,0.3)' : 'rgba(196,154,60,0.18)'}`,
+          padding: '13px 40px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: scrolled ? 'rgba(13,13,13,0.97)' : 'rgba(17,17,17,0.92)',
+          backdropFilter: 'blur(14px)',
+          transition: 'background 0.25s, border-color 0.25s',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <BrainIcon size={32} color={TEAL} strokeWidth={1.1} />
           <Wordmark dark size="md" />
-          <div
-            style={{
-              fontFamily: 'DM Mono,monospace',
-              fontSize: 9,
-              color: '#475569',
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              marginLeft: 6,
-            }}
-          >
+          <div style={{
+            fontFamily: "'DM Mono',monospace", fontSize: 8,
+            color: GOLD, border: '1px solid rgba(196,154,60,0.3)',
+            background: 'rgba(196,154,60,0.07)',
+            letterSpacing: '0.14em', textTransform: 'uppercase',
+            padding: '2px 8px', marginLeft: 4,
+          }}>
             Early Access
           </div>
         </div>
-        <div className="planrr-header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div
-            style={{
-              fontFamily: 'DM Mono,monospace',
-              fontSize: 10,
-              color: GOLD,
-              border: '1px solid rgba(194,150,74,0.22)',
-              padding: '4px 12px',
-              borderRadius: 2,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-            }}
-          >
-            EMAP EMS 5-2022
-          </div>
+
+        {/* Desktop nav links */}
+        <div className="planrr-header-actions" style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <button className="planrr-nav-link" onClick={() => scrollToSection(platformRef)}>Platform</button>
+          <button className="planrr-nav-link" onClick={() => scrollToSection(pillarsRef)}>Pillars</button>
+          <button className="planrr-nav-link" onClick={() => scrollToSection(pricingRef)}>Pricing</button>
+          <button className="planrr-nav-link" onClick={() => scrollToSection(securityRef)}>Security</button>
+          <button className="planrr-nav-link" onClick={() => { window.location.href = '/faq'; }}>FAQ</button>
+          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 8px' }} />
           <button
             onClick={onLogin}
             style={{
-              background: 'none',
-              color: '#94a3b8',
-              border: '1px solid #3A4045',
-              borderRadius: 6,
-              padding: '8px 18px',
-              fontSize: 13,
-              cursor: 'pointer',
-              fontFamily: 'DM Sans,sans-serif',
+              background: 'none', color: '#94a3b8',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 4, padding: '8px 18px',
+              fontSize: 13, cursor: 'pointer',
+              fontFamily: "'DM Sans',sans-serif",
+              transition: 'border-color .15s, color .15s',
             }}
-          >
-            Sign In
-          </button>
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(196,154,60,0.4)'; e.currentTarget.style.color = '#f0f4fa'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#94a3b8'; }}
+          >Sign In</button>
           <button
             onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()}
             style={{
-              background: GOLD,
-              color: '#141719',
-              border: 'none',
-              borderRadius: 6,
-              padding: '8px 18px',
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontFamily: 'DM Sans,sans-serif',
+              background: GOLD, color: '#111',
+              border: 'none', borderRadius: 4,
+              padding: '8px 20px', fontSize: 13,
+              fontWeight: 700, cursor: 'pointer',
+              fontFamily: "'Syne','DM Sans',sans-serif",
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              transition: 'background .15s, transform .1s',
             }}
-          >
-            Start Free Trial
-          </button>
+            onMouseEnter={e => { e.currentTarget.style.background = '#D4AA5A'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = GOLD; e.currentTarget.style.transform = 'translateY(0)'; }}
+          >Start Free Trial</button>
         </div>
+
         <button
           className="planrr-mobile-menu-btn"
           onClick={() => setMobileNav(p => !p)}
           aria-label="Toggle navigation menu"
-          style={{ display: 'none', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid #3A4045', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#f0f4fa', fontSize: 18 }}
-        >
-          {mobileNav ? '✕' : '☰'}
-        </button>
+          style={{ display: 'none', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', color: '#f0f4fa', fontSize: 18 }}
+        >{mobileNav ? '✕' : '☰'}</button>
       </div>
+
+      {/* Mobile menu */}
       {mobileNav && (
-        <div style={{ background: 'rgba(20,23,25,0.98)', borderBottom: '1px solid rgba(194,150,74,0.22)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <button onClick={() => { setMobileNav(false); onLogin(); }} style={{ background: 'none', color: '#94a3b8', border: '1px solid #3A4045', borderRadius: 6, padding: '10px', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', width: '100%' }}>Sign In</button>
-          <button onClick={() => { setMobileNav(false); onBuyPlan ? onBuyPlan('small_team') : onSignup(); }} style={{ background: GOLD, color: '#141719', border: 'none', borderRadius: 6, padding: '10px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', width: '100%' }}>Start Free Trial</button>
+        <div style={{ position: 'sticky', top: 58, zIndex: 49, background: 'rgba(13,13,13,0.98)', borderBottom: '1px solid rgba(196,154,60,0.22)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={() => { setMobileNav(false); onLogin(); }} style={{ background: 'none', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '10px', fontSize: 14, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", width: '100%' }}>Sign In</button>
+          <button onClick={() => { setMobileNav(false); onBuyPlan ? onBuyPlan('small_team') : onSignup(); }} style={{ background: GOLD, color: '#111', border: 'none', borderRadius: 4, padding: '10px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne','DM Sans',sans-serif", width: '100%' }}>Start Free Trial</button>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 8, marginTop: 6 }}>
-            <button onClick={() => scrollToSection(platformRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid #3A4045', borderRadius: 6, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Mono,monospace', letterSpacing: '0.06em' }}>Platform</button>
-            <button onClick={() => scrollToSection(pillarsRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid #3A4045', borderRadius: 6, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Mono,monospace', letterSpacing: '0.06em' }}>Pillars</button>
-            <button onClick={() => scrollToSection(pricingRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid #3A4045', borderRadius: 6, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Mono,monospace', letterSpacing: '0.06em' }}>Pricing</button>
-            <button onClick={() => scrollToSection(securityRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid #3A4045', borderRadius: 6, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Mono,monospace', letterSpacing: '0.06em' }}>Security</button>
-            <button onClick={() => { setMobileNav(false); window.location.href = '/faq'; }} style={{ gridColumn: 'span 2', background: 'none', color: GOLD, border: '1px solid rgba(194,150,74,0.22)', borderRadius: 6, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Mono,monospace', letterSpacing: '0.06em' }}>FAQ</button>
+            <button onClick={() => scrollToSection(platformRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: "'DM Mono',monospace", letterSpacing: '0.06em' }}>Platform</button>
+            <button onClick={() => scrollToSection(pillarsRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: "'DM Mono',monospace", letterSpacing: '0.06em' }}>Pillars</button>
+            <button onClick={() => scrollToSection(pricingRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: "'DM Mono',monospace", letterSpacing: '0.06em' }}>Pricing</button>
+            <button onClick={() => scrollToSection(securityRef)} style={{ background: 'none', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: "'DM Mono',monospace", letterSpacing: '0.06em' }}>Security</button>
+            <button onClick={() => { setMobileNav(false); window.location.href = '/faq'; }} style={{ gridColumn: 'span 2', background: 'none', color: GOLD, border: '1px solid rgba(196,154,60,0.22)', borderRadius: 4, padding: '8px', fontSize: 11, cursor: 'pointer', fontFamily: "'DM Mono',monospace", letterSpacing: '0.06em' }}>FAQ</button>
           </div>
         </div>
       )}
-      <div className="planrr-quick-nav" style={{ borderBottom: '1px solid rgba(194,150,74,0.16)', padding: '10px 40px', background: 'rgba(20,23,25,0.88)', backdropFilter: 'blur(8px)' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[
-            ['Platform', () => scrollToSection(platformRef)],
-            ['Operational Pillars', () => scrollToSection(pillarsRef)],
-            ['Pricing', () => scrollToSection(pricingRef)],
-            ['Security', () => scrollToSection(securityRef)],
-            ['FAQ', () => { window.location.href = '/faq'; }],
-          ].map(([label, onClick]) => (
-            <button
-              key={label}
-              onClick={onClick}
-              style={{
-                background: 'rgba(194,150,74,0.08)',
-                color: '#94a3b8',
-                border: '1px solid rgba(194,150,74,0.18)',
-                borderRadius: 999,
-                padding: '6px 12px',
-                fontFamily: 'DM Mono,monospace',
-                fontSize: 10,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{ borderBottom: '1px solid rgba(194,150,74,0.12)', background: 'rgba(20,23,25,0.7)', padding: '10px 40px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', fontFamily: 'DM Mono,monospace', fontSize: 10, color: '#94a3b8', letterSpacing: '0.04em', lineHeight: 1.7 }}>
-          We replaced spreadsheet archaeology with a system that actually answers "what should we do next?".
-          <span style={{ color: GOLD }}> Less chaos, fewer fire drills, and no 2AM copy-paste marathons before assessment week.</span>
-        </div>
-      </div>
 
-      {/* Hero */}
-      <div
-        className="planrr-landing-hero"
-        style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px 72px' }}
-      >
+      {/* ── CONTENT WRAPPER (above canvas) ── */}
+      <div style={{ position: 'relative', zIndex: 2 }}>
+
+        {/* Dark readability overlays */}
+        <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(180deg,rgba(17,17,17,0.55) 0%,rgba(17,17,17,0.35) 50%,rgba(17,17,17,0.55) 100%)', pointerEvents: 'none', zIndex: 1 }} />
+
+        {/* ── HERO ── */}
         <div
-          style={{
-            fontFamily: 'DM Mono,monospace',
-            fontSize: 11,
-            color: GOLD,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            marginBottom: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}
+          className="planrr-landing-hero"
+          style={{ maxWidth: 1100, margin: '0 auto', padding: '88px 40px 80px', position: 'relative', zIndex: 2 }}
         >
-          <div style={{ width: 28, height: 1, background: GOLD }} />
-          Emergency Management Platform
-        </div>
-        <h1
-          style={{
-            fontFamily: 'Syne,DM Sans,sans-serif',
-            fontSize: 'clamp(38px,5vw,64px)',
-            fontWeight: 800,
-            lineHeight: 1.06,
-            letterSpacing: '-2px',
-            marginBottom: 22,
-          }}
-        >
-          Your EM program.
-          <br />
-          Running at full strength.
-          <br />
-          <span style={{ color: GOLD }}>Every single day.</span>
-        </h1>
-        <p
-          style={{
-            fontSize: 17,
-            color: '#94a3b8',
-            maxWidth: 620,
-            lineHeight: 1.75,
-            marginBottom: 14,
-            fontWeight: 300,
-          }}
-        >
-          planrr.app is the operational system for adaptive-capacity emergency
-          management programs. SAGE is your collaborative AI partner across
-          templates, AARs, THIRA, grants, and EMAP standards so your team can
-          move faster without losing rigor.
-        </p>
-        <p
-          style={{
-            fontFamily: 'DM Mono,monospace',
-            fontSize: 11,
-            color: '#475569',
-            maxWidth: 640,
-            lineHeight: 1.7,
-            marginBottom: 40,
-            borderLeft: '2px solid rgba(194,150,74,0.22)',
+          <div className="planrr-hero-fade" style={{
+            fontFamily: "'DM Mono',monospace",
+            fontSize: 11, color: GOLD,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{ width: 28, height: 1, background: GOLD }} />
+            Emergency Management Platform
+          </div>
+
+          <h1 className="planrr-hero-fade-2" style={{
+            fontFamily: "'Syne','DM Sans',sans-serif",
+            fontSize: 'clamp(38px,5vw,68px)',
+            fontWeight: 800, lineHeight: 1.04,
+            letterSpacing: '-2.5px', marginBottom: 22,
+          }}>
+            Your EM program.<br />
+            Running at full strength.<br />
+            <span style={{ color: GOLD }}>Every single day.</span>
+          </h1>
+
+          <p className="planrr-hero-fade-3" style={{
+            fontSize: 17, color: '#8A9BB0',
+            maxWidth: 600, lineHeight: 1.78,
+            marginBottom: 14, fontWeight: 300,
+          }}>
+            planrr.app is the operational system for emergency management programs. SAGE — your AI program partner — works across standards, AARs, hazard analysis, grants, and plans so your team moves faster without losing rigor.
+          </p>
+
+          <p className="planrr-hero-fade-3" style={{
+            fontFamily: "'DM Mono',monospace", fontSize: 11,
+            color: '#475569', maxWidth: 560, lineHeight: 1.7,
+            marginBottom: 36,
+            borderLeft: '2px solid rgba(196,154,60,0.3)',
             paddingLeft: 14,
-          }}
-        >
-          Built for shops with one or two full-time staff that still need to
-          sustain operations, reduce staleness, and stay assessment-ready year
-          round.
-        </p>
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()}
-            style={{
-              background: GOLD,
-              color: '#141719',
-              border: 'none',
-              padding: '13px 28px',
-              fontFamily: 'Syne,DM Sans,sans-serif',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              borderRadius: 4,
-            }}
-          >
-            Start Free Trial
-          </button>
-          <button
-            onClick={onLogin}
-            style={{
-              border: '1px solid rgba(194,150,74,0.22)',
-              color: GOLD,
-              background: 'none',
-              padding: '12px 24px',
-              fontFamily: 'DM Mono,monospace',
-              fontSize: 12,
-              letterSpacing: '0.08em',
-              cursor: 'pointer',
-              borderRadius: 4,
-            }}
-          >
-            Sign In to Your Program
-          </button>
-        </div>
-      </div>
+          }}>
+            Built for shops who need to sustain operations, reduce staleness, and stay ready year round.
+          </p>
 
-      {/* Stats strip */}
-      <div
-        className="planrr-stats-strip"
-        style={{
-          borderTop: '1px solid rgba(194,150,74,0.22)',
-          borderBottom: '1px solid rgba(194,150,74,0.22)',
-          background: 'rgba(28,31,34,0.85)',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4,1fr)',
-        }}
-      >
-        {[
-          ['73', 'EMAP Standards Tracked'],
-          ['32', 'FEMA Core Capabilities'],
-          ['6', 'AI Document Templates'],
-          ['100%', 'End-to-End EM System'],
-        ].map(([n, l]) => (
-          <div
-            key={l}
-            style={{
-              padding: '28px clamp(24px,3vw,48px)',
-              borderRight: '1px solid rgba(194,150,74,0.12)',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: 'Syne,DM Sans,sans-serif',
-                fontSize: 36,
-                fontWeight: 800,
-                color: GOLD,
-                lineHeight: 1,
-                marginBottom: 6,
-              }}
-            >
-              {n}
+          {/* THE BANGER */}
+          <div className="planrr-hero-fade-3" style={{
+            marginBottom: 36, maxWidth: 680,
+            background: 'rgba(19,14,2,0.88)',
+            border: '1px solid rgba(196,154,60,0.45)',
+            borderLeft: '4px solid ' + GOLD,
+            padding: '18px 22px',
+          }}>
+            <div style={{ fontSize: 15, color: '#f0f4fa', fontWeight: 500, lineHeight: 1.45, marginBottom: 6, fontFamily: "'Syne','DM Sans',sans-serif" }}>
+              When the disaster hits, nobody asks about your budget.
+              They ask if you were ready.
             </div>
-            <div
-              style={{
-                fontFamily: 'DM Mono,monospace',
-                fontSize: 10,
-                color: '#475569',
-                letterSpacing: '0.13em',
-                textTransform: 'uppercase',
-                lineHeight: 1.5,
-              }}
-            >
-              {l}
+            <div style={{ fontSize: 14, color: GOLD, fontWeight: 400, lineHeight: 1.45, fontFamily: "'DM Sans',sans-serif" }}>
+              planrr.app doesn't make the plan survive. It makes your organization tough enough that it doesn't need to.
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Features */}
-      <div ref={platformRef} className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
-        <div
-          style={{
-            fontFamily: 'DM Mono,monospace',
-            fontSize: 10,
-            color: GOLD,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            marginBottom: 10,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
-          <div style={{ width: 20, height: 1, background: GOLD }} />
-          The Platform
+          <div className="planrr-hero-fade-4" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()}
+              style={{
+                background: GOLD, color: '#111', border: 'none',
+                padding: '14px 32px',
+                fontFamily: "'Syne','DM Sans',sans-serif",
+                fontSize: 13, fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                cursor: 'pointer', borderRadius: 2,
+                transition: 'background .15s, transform .1s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#D4AA5A'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = GOLD; e.currentTarget.style.transform = 'translateY(0)'; }}
+            >Start Free Trial</button>
+            <button
+              onClick={onLogin}
+              style={{
+                border: '1px solid rgba(196,154,60,0.28)', color: GOLD,
+                background: 'rgba(196,154,60,0.05)',
+                padding: '13px 26px',
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 11, letterSpacing: '0.1em',
+                cursor: 'pointer', borderRadius: 2,
+                transition: 'background .15s, border-color .15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(196,154,60,0.1)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(196,154,60,0.05)'; }}
+            >Sign In to Your Program →</button>
+          </div>
         </div>
-        <h2
-          style={{
-            fontFamily: 'Syne,DM Sans,sans-serif',
-            fontSize: 'clamp(24px,3vw,36px)',
-            fontWeight: 700,
-            letterSpacing: '-1px',
-            marginBottom: 12,
-          }}
-        >
-          Everything your program needs.
-          <br />
-          <span style={{ color: GOLD }}>One place.</span>
-        </h2>
-        <p
-          style={{
-            color: '#94a3b8',
-            fontSize: 15,
-            fontWeight: 300,
-            maxWidth: 640,
-            lineHeight: 1.75,
-            marginBottom: 48,
-          }}
-        >
-          Built around EMAP EMS 5-2022, HSEEP, and CPG 201. SAGE works as a
-          collaborative planning partner while each module feeds the others, so
-          your compliance picture and operational readiness improve together.
-        </p>
+
+        {/* ── STATS STRIP ── */}
         <div
-          className="planrr-features-grid"
+          className="planrr-stats-strip"
           style={{
+            borderTop: '1px solid rgba(196,154,60,0.22)',
+            borderBottom: '1px solid rgba(196,154,60,0.22)',
+            background: 'rgba(13,13,13,0.88)',
+            backdropFilter: 'blur(8px)',
             display: 'grid',
-            gridTemplateColumns: 'repeat(3,1fr)',
-            gap: 2,
+            gridTemplateColumns: 'repeat(4,1fr)',
+            position: 'relative', zIndex: 2,
           }}
         >
           {[
-            [
-              'EMAP Standards',
-              'Track all 73 EMS 5-2022 standards. Upload evidence, write rationale, get AI interpretation. Your compliance picture updates in real time.',
-              'Accreditation Core',
-            ],
-            [
-              'Smart Priority Queue',
-              'One prioritized list of what to work on today. Expiring MOUs, overdue reviews, credential alerts, and missing plans - sorted by urgency and EMAP impact.',
-              'Dashboard',
-            ],
-            [
-              'Exercises & AARs',
-              'Full HSEEP workflow with AI-generated After-Action Reports. Corrective actions auto-populate your CAP dashboard.',
-              'HSEEP Aligned',
-            ],
-            [
-              'Document Templates',
-              'AI-generated templates pre-filled with your program data. Strategic plans, COOP, resource management, communications, training, and exercise plans.',
-              'AI-Powered',
-            ],
-            [
-              'Recovery Planning',
-              'Dedicated recovery module with short, intermediate, and long-term phases. Built around EMAP 4.5.4 and the Argonne study findings.',
-              'EMAP 4.5.4',
-            ],
-            [
-              'Evidence Export',
-              'One-click evidence packages for your assessors. All docs, training records, AARs, and notes bundled per standard. Assessment-ready.',
-              'Accreditation',
-            ],
-            [
-              'Mutual Aid Mapping',
-              'Map which partners share which resources. Coverage matrix shows gaps. Built for jurisdictions that share resources to stay independent.',
-              'EMAP 4.7',
-            ],
-            [
-              'FEMA/NIMS Alignment',
-              'Secondary compliance badge tracking ICS, NIMS, and interoperability standards. Show FEMA alignment alongside your EMAP progress.',
-              'ICS/NIMS',
-            ],
-            [
-              'Grant-EMAP Tracker',
-              'See which active grants tie to which EMAP standards. Flag when compliance gaps might jeopardize funding eligibility.',
-              'EMAP 3.4',
-            ],
-          ].map(([t, d, tag]) => (
+            ['73', 'EMAP Standards', 'Tracked'],
+            ['32', 'FEMA Core', 'Capabilities'],
+            ['100%', 'End-to-End', 'EM System'],
+            ['SAGE', 'Your AI', 'Program Partner'],
+          ].map(([n, l1, l2], i) => (
             <div
-              key={t}
+              key={l1}
               style={{
-                background: '#1C1F22',
-                border: '1px solid #2E3439',
-                padding: '28px 24px',
-                transition: 'all 0.2s',
+                padding: '28px clamp(20px,3vw,44px)',
+                borderRight: i < 3 ? '1px solid rgba(196,154,60,0.1)' : 'none',
               }}
             >
-              <div
-                style={{
-                  fontFamily: 'Syne,DM Sans,sans-serif',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  marginBottom: 8,
-                }}
-              >
-                {t}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: '#94a3b8',
-                  lineHeight: 1.65,
-                  marginBottom: 14,
-                  fontWeight: 300,
-                }}
-              >
-                {d}
-              </div>
-              <div
-                style={{
-                  fontFamily: 'DM Mono,monospace',
-                  fontSize: 9,
-                  color: GOLD,
-                  border: '1px solid rgba(194,150,74,0.22)',
-                  padding: '2px 8px',
-                  display: 'inline-block',
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {tag}
-              </div>
+              <div style={{
+                fontFamily: "'Syne','DM Sans',sans-serif",
+                fontSize: n === 'SAGE' ? 28 : 38,
+                fontWeight: 800, color: GOLD,
+                lineHeight: 1, marginBottom: 8,
+                letterSpacing: n === 'SAGE' ? '-0.5px' : '-1.5px',
+              }}>{n}</div>
+              <div style={{
+                fontFamily: "'DM Mono',monospace", fontSize: 9,
+                color: '#475569', letterSpacing: '0.13em',
+                textTransform: 'uppercase', lineHeight: 1.6,
+              }}>{l1}<br />{l2}</div>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* Operational Pillars */}
-      <div ref={pillarsRef} style={{ borderTop: '1px solid rgba(194,150,74,0.22)', background: '#1C1F22' }}>
-        <div className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
-          <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 10, color: GOLD, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* ── PLATFORM / FEATURES ── */}
+        <div ref={platformRef} className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px', position: 'relative', zIndex: 2 }}>
+          <div style={{
+            fontFamily: "'DM Mono',monospace", fontSize: 10, color: GOLD,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12,
+          }}>
             <div style={{ width: 20, height: 1, background: GOLD }} />
-            Four Operational Pillars
+            The Platform
           </div>
-          <h2 style={{ fontFamily: 'Syne,DM Sans,sans-serif', fontSize: 'clamp(24px,3vw,36px)', fontWeight: 700, letterSpacing: '-1px', marginBottom: 12 }}>
-            Daily operations that sustain <span style={{ color: GOLD }}>adaptive capacity.</span>
+          <h2 style={{
+            fontFamily: "'Syne','DM Sans',sans-serif",
+            fontSize: 'clamp(24px,3vw,40px)',
+            fontWeight: 800, letterSpacing: '-1.5px', marginBottom: 12,
+          }}>
+            Everything your program needs.<br />
+            <span style={{ color: GOLD }}>One place.</span>
           </h2>
-          <p style={{ color: '#94a3b8', fontSize: 15, fontWeight: 300, maxWidth: 700, lineHeight: 1.75, marginBottom: 48 }}>
-            planrr keeps your program resilient through four connected loops: detect staleness early,
-            structure COOP data, close the AAR loop, and continuously rebalance priorities with SAGE.
+          <p style={{
+            color: '#8A9BB0', fontSize: 15, fontWeight: 300,
+            maxWidth: 640, lineHeight: 1.78, marginBottom: 52,
+          }}>
+            Built around EMAP EMS 5-2022, HSEEP, and CPG 201. SAGE works as a collaborative planning partner while each module feeds the others — your compliance picture and operational readiness improve together.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 2 }} className="planrr-features-grid">
+          <div
+            className="planrr-features-grid"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 3 }}
+          >
             {[
-              ['Staleness Detection', 'Continuously flags aging plans, expiring agreements, and overdue reviews before they become readiness failures.', 'Continuity Guardrail'],
-              ['COOP Structured Data', 'Turns COOP assumptions, dependencies, and recovery priorities into structured records linked to standards and tasks.', 'COOP Ready'],
-              ['AAR Loop', 'Connects exercise observations to corrective actions, owners, and due dates so lessons learned become lessons applied.', 'Improvement Engine'],
-              ['Enhanced Priority Queue', 'Weights urgency, compliance impact, and operational risk so SAGE surfaces the highest-value action for today.', 'Decision Support'],
+              ['EMAP Standards', 'Track all 73 EMS 5-2022 standards. Upload evidence, write rationale, get AI interpretation. Your compliance picture updates in real time.', 'Accreditation Core'],
+              ['Smart Priority Queue', 'One prioritized list of what to work on today. Expiring MOUs, overdue reviews, credential alerts, and missing plans — sorted by urgency and EMAP impact.', 'Dashboard'],
+              ['Exercises & AARs', 'Full HSEEP workflow with AI-generated After-Action Reports. Corrective actions auto-populate your CAP dashboard.', 'HSEEP Aligned'],
+              ['Document Templates', 'AI-generated templates pre-filled with your program data. Strategic plans, COOP, resource management, communications, training, and exercise plans.', 'AI-Powered'],
+              ['Recovery Planning', 'Dedicated recovery module with short, intermediate, and long-term phases. Built around EMAP 4.5.4 and the Argonne study findings.', 'EMAP 4.5.4'],
+              ['Evidence Export', 'One-click evidence packages for your assessors. All docs, training records, AARs, and notes bundled per standard. Assessment-ready.', 'Accreditation'],
+              ['Mutual Aid Mapping', 'Map which partners share which resources. Coverage matrix shows gaps. Built for jurisdictions that share resources to stay independent.', 'EMAP 4.7'],
+              ['FEMA/NIMS Alignment', 'Secondary compliance badge tracking ICS, NIMS, and interoperability standards. Show FEMA alignment alongside your EMAP progress.', 'ICS/NIMS'],
+              ['Grant-EMAP Tracker', 'See which active grants tie to which EMAP standards. Flag when compliance gaps might jeopardize funding eligibility.', 'EMAP 3.4'],
             ].map(([t, d, tag]) => (
-              <div key={t} style={{ background: '#1C1F22', border: '1px solid #2E3439', padding: '28px 24px' }}>
-                <div style={{ fontFamily: 'Syne,DM Sans,sans-serif', fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{t}</div>
-                <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.7, marginBottom: 14, fontWeight: 300 }}>{d}</div>
-                <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 9, color: GOLD, border: '1px solid rgba(194,150,74,0.22)', padding: '2px 8px', display: 'inline-block', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{tag}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Pricing */}
-      <div
-        ref={pricingRef}
-        style={{
-          borderTop: '1px solid #2E3439',
-          borderBottom: '1px solid #2E3439',
-          background: 'rgba(28,31,34,0.85)',
-        }}
-      >
-        <div className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
-          <div
-            style={{
-              fontFamily: 'DM Mono,monospace',
-              fontSize: 10,
-              color: GOLD,
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-              marginBottom: 10,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <div style={{ width: 20, height: 1, background: GOLD }} />
-            Pricing
-          </div>
-          <h2
-            style={{
-              fontFamily: 'Syne,DM Sans,sans-serif',
-              fontSize: 'clamp(24px,3vw,36px)',
-              fontWeight: 700,
-              letterSpacing: '-1px',
-              marginBottom: 12,
-            }}
-          >
-            Built for every shop size.
-            <br />
-            <span style={{ color: GOLD }}>No feature gating. Ever.</span>
-          </h2>
-          <p
-            style={{
-              color: '#94a3b8',
-              fontSize: 15,
-              fontWeight: 300,
-              maxWidth: 560,
-              lineHeight: 1.75,
-              marginBottom: 48,
-            }}
-          >
-            Every plan gets every feature - the full EM program in a box. We
-            price by team size because understaffed shops deserve the same tools
-            as large agencies. Each plan includes defined user seats and monthly
-            AI usage. Larger teams are expected to be on higher-tier plans.
-          </p>
-          <div
-            className="planrr-pricing-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4,1fr)',
-              gap: 2,
-            }}
-          >
-            {/* Solo Operator */}
-            <div
-              style={{
-                background: '#141719',
-                border: '1px solid #2E3439',
-                padding: '28px 24px',
-                borderRadius: '8px 0 0 8px',
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: 'DM Mono,monospace',
-                  fontSize: 9,
-                  color: B.teal,
-                  letterSpacing: '0.15em',
-                  textTransform: 'uppercase',
-                  marginBottom: 16,
-                }}
-              >
-                Solo Operator
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 4,
-                  marginBottom: 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'Syne,DM Sans,sans-serif',
-                    fontSize: 40,
-                    fontWeight: 800,
-                    color: '#f0f4fa',
-                    lineHeight: 1,
-                  }}
-                >
-                  $79
-                </span>
-                <span style={{ color: '#475569', fontSize: 12 }}>/mo</span>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: '#475569',
-                  marginBottom: 20,
-                  lineHeight: 1.5,
-                }}
-              >
-                1 FTE or fewer. For the solo EM director wearing every hat.
-              </div>
-              {[
-                'Every feature included',
-                '1 user seat',
-                '200 AI calls / month',
-                'Email support',
-              ].map((f) => (
-                <div
-                  key={f}
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'flex-start',
-                    marginBottom: 7,
-                    fontSize: 12,
-                    color: '#94a3b8',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: B.teal,
-                      flexShrink: 0,
-                      marginTop: 1,
-                      fontSize: 10,
-                    }}
-                  >
-                    +
-                  </span>
-                  {f}
-                </div>
-              ))}
-              <button
-                onClick={() => onBuyPlan ? onBuyPlan('solo') : onSignup()}
-                style={{
-                  width: '100%',
-                  marginTop: 16,
-                  background: 'transparent',
-                  color: B.teal,
-                  border: '1px solid rgba(27,201,196,0.3)',
-                  padding: '10px',
-                  fontFamily: 'DM Sans,sans-serif',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                }}
-              >
-                Start Free Trial
-              </button>
-            </div>
-            {/* Small Team - FEATURED */}
-            <div
-              style={{
-                background: '#141719',
-                border: '2px solid ' + GOLD,
-                padding: '28px 24px',
-                position: 'relative',
-                zIndex: 1,
-                borderRadius: 0,
-                boxShadow: '0 0 30px rgba(194,150,74,0.15)',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: -1,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  background: GOLD,
-                  color: '#141719',
-                  fontSize: 9,
-                  fontWeight: 800,
-                  padding: '3px 12px',
-                  borderRadius: '0 0 4px 4px',
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Most Popular
-              </div>
-              <div
-                style={{
-                  fontFamily: 'DM Mono,monospace',
-                  fontSize: 9,
-                  color: GOLD,
-                  letterSpacing: '0.15em',
-                  textTransform: 'uppercase',
-                  marginBottom: 16,
-                }}
-              >
-                Small Team
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 4,
-                  marginBottom: 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'Syne,DM Sans,sans-serif',
-                    fontSize: 40,
-                    fontWeight: 800,
-                    color: '#f0f4fa',
-                    lineHeight: 1,
-                  }}
-                >
-                  $149
-                </span>
-                <span style={{ color: '#475569', fontSize: 12 }}>/mo</span>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: '#475569',
-                  marginBottom: 20,
-                  lineHeight: 1.5,
-                }}
-              >
-                2-5 FTE staff. The backbone of local EM.
-              </div>
-              {[
-                'Every feature included',
-                'Up to 5 user seats',
-                '1,000 AI calls / month',
-                'Priority support',
-              ].map((f) => (
-                <div
-                  key={f}
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'flex-start',
-                    marginBottom: 7,
-                    fontSize: 12,
-                    color: '#94a3b8',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: GOLD,
-                      flexShrink: 0,
-                      marginTop: 1,
-                      fontSize: 10,
-                    }}
-                  >
-                    +
-                  </span>
-                  {f}
-                </div>
-              ))}
-              <button
-                onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()}
-                style={{
-                  width: '100%',
-                  marginTop: 16,
-                  background: GOLD,
-                  color: '#141719',
-                  border: 'none',
-                  padding: '10px',
-                  fontFamily: 'Syne,DM Sans,sans-serif',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                }}
-              >
-                Start Free Trial
-              </button>
-            </div>
-            {/* Full Program */}
-            <div
-              style={{
-                background: '#141719',
-                border: '1px solid #2E3439',
-                padding: '28px 24px',
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: 'DM Mono,monospace',
-                  fontSize: 9,
-                  color: '#94a3b8',
-                  letterSpacing: '0.15em',
-                  textTransform: 'uppercase',
-                  marginBottom: 16,
-                }}
-              >
-                Full Program
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 4,
-                  marginBottom: 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'Syne,DM Sans,sans-serif',
-                    fontSize: 40,
-                    fontWeight: 800,
-                    color: '#f0f4fa',
-                    lineHeight: 1,
-                  }}
-                >
-                  $199
-                </span>
-                <span style={{ color: '#475569', fontSize: 12 }}>/mo</span>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: '#475569',
-                  marginBottom: 20,
-                  lineHeight: 1.5,
-                }}
-              >
-                6+ FTE. For established programs scaling up.
-              </div>
-              {[
-                'Every feature included',
-                'Unlimited user seats',
-                '5,000 AI calls / month',
-                'Dedicated onboarding',
-                'Phone support',
-              ].map((f) => (
-                <div
-                  key={f}
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'flex-start',
-                    marginBottom: 7,
-                    fontSize: 12,
-                    color: '#94a3b8',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: '#94a3b8',
-                      flexShrink: 0,
-                      marginTop: 1,
-                      fontSize: 10,
-                    }}
-                  >
-                    +
-                  </span>
-                  {f}
-                </div>
-              ))}
-              <button
-                onClick={() => onBuyPlan ? onBuyPlan('full_program') : onSignup()}
-                style={{
-                  width: '100%',
-                  marginTop: 16,
-                  background: 'transparent',
-                  color: '#94a3b8',
-                  border: '1px solid #3A4045',
-                  padding: '10px',
-                  fontFamily: 'DM Sans,sans-serif',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                }}
-              >
-                Start Free Trial
-              </button>
-            </div>
-            {/* Enterprise / Multi-Org */}
-            <div
-              style={{
-                background: '#141719',
-                border: '1px solid #2E3439',
-                padding: '28px 24px',
-                borderRadius: '0 8px 8px 0',
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: 'DM Mono,monospace',
-                  fontSize: 9,
-                  color: B.purple,
-                  letterSpacing: '0.15em',
-                  textTransform: 'uppercase',
-                  marginBottom: 16,
-                }}
-              >
-                Enterprise
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 4,
-                  marginBottom: 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'Syne,DM Sans,sans-serif',
-                    fontSize: 28,
-                    fontWeight: 800,
-                    color: '#f0f4fa',
-                    lineHeight: 1,
-                  }}
-                >
-                  Custom
-                </span>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: '#475569',
-                  marginBottom: 20,
-                  lineHeight: 1.5,
-                }}
-              >
-                Multi-org contractors, state agencies, and regional coalitions.
-              </div>
-              {[
-                'Every feature included',
-                'Unlimited seats & AI usage',
-                'Multi-org dashboard',
-                'Dedicated account manager',
-                'SLA guarantees',
-                'Custom integrations',
-              ].map((f) => (
-                <div
-                  key={f}
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'flex-start',
-                    marginBottom: 7,
-                    fontSize: 12,
-                    color: '#94a3b8',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: B.purple,
-                      flexShrink: 0,
-                      marginTop: 1,
-                      fontSize: 10,
-                    }}
-                  >
-                    +
-                  </span>
-                  {f}
-                </div>
-              ))}
-              <button
-                onClick={onSignup}
-                style={{
-                  width: '100%',
-                  marginTop: 16,
-                  background: 'transparent',
-                  color: B.purple,
-                  border: '1px solid rgba(139,92,246,0.3)',
-                  padding: '10px',
-                  fontFamily: 'DM Sans,sans-serif',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                }}
-              >
-                Contact Sales
-              </button>
-            </div>
-          </div>
-          <div style={{ textAlign: 'center', marginTop: 24 }}>
-            <div
-              style={{
-                fontFamily: 'DM Mono,monospace',
-                fontSize: 10,
-                color: '#475569',
-                letterSpacing: '0.08em',
-              }}
-            >
-              14-day free trial on all plans. No credit card required. Discount
-              codes available for shops under 2 FTE.
-            </div>
-            <div
-              style={{
-                fontFamily: 'DM Mono,monospace',
-                fontSize: 10,
-                color: GOLD,
-                letterSpacing: '0.08em',
-                marginTop: 6,
-              }}
-            >
-              Founding agency pricing locked for life.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CTA */}
-      <div
-        style={{
-          background: '#1C1F22',
-          borderTop: '1px solid rgba(194,150,74,0.22)',
-          borderBottom: '1px solid rgba(194,150,74,0.22)',
-          padding: '64px 40px',
-          textAlign: 'center',
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: 'Syne,DM Sans,sans-serif',
-            fontSize: 'clamp(26px,4vw,42px)',
-            fontWeight: 800,
-            letterSpacing: '-1.5px',
-            marginBottom: 14,
-          }}
-        >
-          Your program deserves better
-          <br />
-          than a <span style={{ color: GOLD }}>spreadsheet.</span>
-        </h2>
-        <p
-          style={{
-            color: '#94a3b8',
-            fontSize: 15,
-            fontWeight: 300,
-            marginBottom: 32,
-            maxWidth: 560,
-            margin: '0 auto 32px',
-            lineHeight: 1.7,
-          }}
-        >
-          Bring SAGE into your daily workflow and run a collaborative,
-          standards-aligned program that improves readiness every week — not
-          just right before an assessment.
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            gap: 14,
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-          }}
-        >
-          <button
-            onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()}
-            style={{
-              background: GOLD,
-              color: '#141719',
-              border: 'none',
-              padding: '13px 28px',
-              fontFamily: 'Syne,DM Sans,sans-serif',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              borderRadius: 4,
-            }}
-          >
-            Start Free Trial
-          </button>
-          <button
-            onClick={onLogin}
-            style={{
-              border: '1px solid rgba(194,150,74,0.22)',
-              color: GOLD,
-              background: 'none',
-              padding: '12px 24px',
-              fontFamily: 'DM Mono,monospace',
-              fontSize: 12,
-              letterSpacing: '0.08em',
-              cursor: 'pointer',
-              borderRadius: 4,
-            }}
-          >
-            Sign In
-          </button>
-        </div>
-        <div
-          style={{
-            fontFamily: 'DM Mono,monospace',
-            fontSize: 10,
-            color: '#475569',
-            letterSpacing: '0.1em',
-            marginTop: 18,
-          }}
-        >
-          Founding agency pricing. Locked for life. Direct input into the
-          product roadmap.
-        </div>
-      </div>
-
-      {/* Security & Compliance */}
-      <div
-        ref={securityRef}
-        style={{
-          borderTop: '1px solid #2E3439',
-          background: 'rgba(28,31,34,0.85)',
-        }}
-      >
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '72px 40px' }}>
-          <div
-            style={{
-              fontFamily: 'DM Mono,monospace',
-              fontSize: 10,
-              color: GOLD,
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-              marginBottom: 10,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <div style={{ width: 20, height: 1, background: GOLD }} />
-            Security & Compliance
-          </div>
-          <h2
-            style={{
-              fontFamily: 'Syne,DM Sans,sans-serif',
-              fontSize: 'clamp(24px,3vw,36px)',
-              fontWeight: 700,
-              letterSpacing: '-1px',
-              marginBottom: 12,
-            }}
-          >
-            Built for agencies that handle{' '}
-            <span style={{ color: GOLD }}>sensitive data.</span>
-          </h2>
-          <p
-            style={{
-              color: '#94a3b8',
-              fontSize: 15,
-              fontWeight: 300,
-              maxWidth: 560,
-              lineHeight: 1.75,
-              marginBottom: 48,
-            }}
-          >
-            Emergency management data demands serious protection. We treat
-            security as a first-class requirement, not an afterthought.
-          </p>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3,1fr)',
-              gap: 2,
-            }}
-            className="planrr-security-grid"
-          >
-            {[
-              ['HTTPS Everywhere', 'All data in transit is encrypted via TLS 1.2+. No exceptions.'],
-              ['Encryption at Rest', 'All stored data is encrypted at rest via cloud provider-managed keys (AES-256).'],
-              ['Authenticated Access', 'Every API call requires valid auth tokens. Org-scoped access ensures data isolation between agencies.'],
-              ['Activity Logs', 'Complete audit trail of user actions. Know who changed what, and when.'],
-              ['Automated Backups', 'Continuous database backups with point-in-time recovery. Your program data is never at risk.'],
-              ['Secure Infrastructure', 'Hosted on SOC 2-certified cloud infrastructure with network isolation, DDoS protection, and 24/7 monitoring.'],
-            ].map(([t, d]) => (
               <div
                 key={t}
-                style={{
-                  background: '#1C1F22',
-                  border: '1px solid #2E3439',
-                  padding: '28px 24px',
-                }}
+                className="planrr-card"
+                style={{ ...cardBase }}
               >
-                <div
-                  style={{
-                    fontFamily: 'Syne,DM Sans,sans-serif',
-                    fontSize: 15,
-                    fontWeight: 700,
-                    marginBottom: 8,
-                    color: '#f0f4fa',
-                  }}
-                >
-                  {t}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: '#94a3b8',
-                    lineHeight: 1.65,
-                    fontWeight: 300,
-                  }}
-                >
-                  {d}
-                </div>
+                <div style={tealAccent} />
+                <div style={{
+                  fontFamily: "'Syne','DM Sans',sans-serif",
+                  fontSize: 15, fontWeight: 700,
+                  marginBottom: 8, paddingLeft: 10,
+                }}>{t}</div>
+                <div style={{
+                  fontSize: 13, color: '#8A9BB0',
+                  lineHeight: 1.68, marginBottom: 16,
+                  fontWeight: 300, paddingLeft: 10,
+                }}>{d}</div>
+                <div style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 9,
+                  color: TEAL, border: '1px solid rgba(62,207,207,0.25)',
+                  background: 'rgba(62,207,207,0.06)',
+                  padding: '2px 9px', display: 'inline-block',
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                  marginLeft: 10,
+                }}>{tag}</div>
               </div>
             ))}
           </div>
-          {/* SOC 2 Roadmap */}
-          <div
-            style={{
-              marginTop: 56,
-              border: '1px solid rgba(194,150,74,0.22)',
-              borderRadius: 12,
-              padding: '32px 36px',
-              background: '#141719',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: 'DM Mono,monospace',
-                fontSize: 9,
-                color: GOLD,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                marginBottom: 14,
-              }}
-            >
-              SOC 2 Compliance Roadmap
+        </div>
+
+        {/* ── OPERATIONAL PILLARS ── */}
+        <div ref={pillarsRef} style={{ borderTop: '1px solid rgba(196,154,60,0.18)', background: 'rgba(13,13,13,0.7)', position: 'relative', zIndex: 2 }}>
+          <div className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px' }}>
+            <div style={{
+              fontFamily: "'DM Mono',monospace", fontSize: 10, color: TEAL,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <div style={{ width: 20, height: 1, background: TEAL }} />
+              Four Operational Pillars
             </div>
-            <h3
-              style={{
-                fontFamily: 'Syne,DM Sans,sans-serif',
-                fontSize: 20,
-                fontWeight: 700,
-                marginBottom: 8,
-                color: '#f0f4fa',
-              }}
-            >
-              On the path to SOC 2 certification
-            </h3>
-            <p
-              style={{
-                fontSize: 13,
-                color: '#94a3b8',
-                lineHeight: 1.7,
-                marginBottom: 28,
-                maxWidth: 560,
-              }}
-            >
-              We are actively pursuing SOC 2 compliance to meet the security
-              and trust requirements of government agencies.
+            <h2 style={{
+              fontFamily: "'Syne','DM Sans',sans-serif",
+              fontSize: 'clamp(24px,3vw,40px)',
+              fontWeight: 800, letterSpacing: '-1.5px', marginBottom: 12,
+            }}>
+              Daily operations that sustain{' '}
+              <span style={{ color: GOLD }}>adaptive capacity.</span>
+            </h2>
+            <p style={{
+              color: '#8A9BB0', fontSize: 15, fontWeight: 300,
+              maxWidth: 700, lineHeight: 1.78, marginBottom: 52,
+            }}>
+              planrr keeps your program ready through four connected loops: detect staleness early, structure COOP data, close the AAR loop, and continuously rebalance priorities with SAGE.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 3 }} className="planrr-features-grid">
               {[
-                ['Q2 – Q3 2026', 'Policies, access control, and change management frameworks', true],
-                ['Q3 2026', 'Readiness assessment with independent auditor', true],
-                ['Q4 2026 – Q1 2027', 'SOC 2 Type I audit and certification', false],
-                ['Q3 2027', 'SOC 2 Type II audit and certification', false],
-              ].map(([q, desc, active], i) => (
-                <div
-                  key={q}
-                  style={{
-                    display: 'flex',
-                    gap: 16,
-                    alignItems: 'flex-start',
-                    position: 'relative',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      flexShrink: 0,
-                      width: 20,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        background: active ? GOLD : '#2E3439',
-                        border: active ? 'none' : '2px solid #475569',
-                        flexShrink: 0,
-                        marginTop: 4,
-                      }}
-                    />
-                    {i < 3 && (
-                      <div
-                        style={{
-                          width: 2,
-                          height: 32,
-                          background: '#2E3439',
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div style={{ paddingBottom: i < 3 ? 16 : 0 }}>
-                    <div
-                      style={{
-                        fontFamily: 'DM Mono,monospace',
-                        fontSize: 11,
-                        color: active ? GOLD : '#475569',
-                        fontWeight: 600,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {q}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: '#94a3b8',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {desc}
-                    </div>
-                  </div>
+                ['Staleness Detection', 'Continuously flags aging plans, expiring agreements, and overdue reviews before they become readiness failures.', 'Continuity Guardrail', GOLD],
+                ['COOP Structured Data', 'Turns COOP assumptions, dependencies, and recovery priorities into structured records linked to standards and tasks.', 'COOP Ready', TEAL],
+                ['AAR Loop', 'Connects observations to corrective actions, owners, and due dates so lessons learned become lessons applied.', 'Improvement Engine', GOLD],
+                ['Enhanced Priority Queue', 'Weights urgency, compliance impact, and operational risk so SAGE surfaces the highest-value action for today.', 'Decision Support', TEAL],
+              ].map(([t, d, tag, accentColor]) => (
+                <div key={t} className="planrr-card" style={{ ...cardBase }}>
+                  <div style={{ ...tealAccent, background: accentColor }} />
+                  <div style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 17, fontWeight: 700, marginBottom: 8, paddingLeft: 10 }}>{t}</div>
+                  <div style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.7, marginBottom: 16, fontWeight: 300, paddingLeft: 10 }}>{d}</div>
+                  <div style={{
+                    fontFamily: "'DM Mono',monospace", fontSize: 9,
+                    color: accentColor,
+                    border: `1px solid ${accentColor}44`,
+                    background: `${accentColor}0d`,
+                    padding: '2px 9px', display: 'inline-block',
+                    letterSpacing: '0.12em', textTransform: 'uppercase',
+                    marginLeft: 10,
+                  }}>{tag}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div
-        style={{
-          borderTop: '1px solid #2E3439',
-          padding: '40px 40px 28px',
-        }}
-        className="planrr-landing-header"
-      >
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 32, marginBottom: 32 }}>
-            <div>
-              <div
-                style={{
-                  marginBottom: 10,
-                }}
-              >
-                <Wordmark dark size="md" />
-              </div>
-              <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 10, color: '#475569', letterSpacing: '0.08em', maxWidth: 260, lineHeight: 1.6 }}>
-                Emergency Management Program Platform.
-                <br />EMAP EMS 5-2022 Aligned.
-              </div>
+        {/* ── PRICING ── */}
+        <div ref={pricingRef} style={{ borderTop: '1px solid rgba(196,154,60,0.18)', background: 'rgba(13,13,13,0.82)', position: 'relative', zIndex: 2 }}>
+          <div className="planrr-landing-section" style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px' }}>
+            <div style={{
+              fontFamily: "'DM Mono',monospace", fontSize: 10, color: GOLD,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <div style={{ width: 20, height: 1, background: GOLD }} />
+              Pricing
             </div>
-            <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 9, color: '#475569', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 12, fontWeight: 700 }}>Product</div>
-                {[['Features', null], ['Pricing', null], ['Security', null], ['FAQ', '/faq']].map(([t, href]) => (
-                  href ? <Link key={t} to={href} style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer', textDecoration: 'none' }}
-                    onMouseEnter={e => e.currentTarget.style.color = GOLD}
-                    onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
-                  >{t}</Link> : <div key={t} style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.color = GOLD}
-                    onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
-                  >{t}</div>
+            <h2 style={{
+              fontFamily: "'Syne','DM Sans',sans-serif",
+              fontSize: 'clamp(24px,3vw,40px)',
+              fontWeight: 800, letterSpacing: '-1.5px', marginBottom: 12,
+            }}>
+              Built for every shop size.<br />
+              <span style={{ color: GOLD }}>No feature gating. Ever.</span>
+            </h2>
+            <p style={{
+              color: '#8A9BB0', fontSize: 15, fontWeight: 300,
+              maxWidth: 560, lineHeight: 1.78, marginBottom: 52,
+            }}>
+              Every plan gets every feature — the full EM program in a box. We price by team size because understaffed shops deserve the same tools as large agencies.
+            </p>
+            <div
+              className="planrr-pricing-grid"
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 2 }}
+            >
+              {/* Solo Operator */}
+              <div style={{
+                background: 'rgba(14,14,14,0.95)',
+                border: '1px solid rgba(62,207,207,0.18)',
+                padding: '32px 24px', borderRadius: '4px 0 0 4px',
+              }}>
+                <div style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 9, color: TEAL,
+                  letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 18,
+                }}>Solo Operator</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 44, fontWeight: 800, color: '#f0f4fa', lineHeight: 1 }}>$79</span>
+                  <span style={{ color: '#475569', fontSize: 12 }}>/mo</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#475569', marginBottom: 22, lineHeight: 1.55 }}>1 FTE or fewer. For the solo EM director wearing every hat.</div>
+                {['Every feature included', '1 user seat', '200 AI calls / month', 'Email support'].map((f) => (
+                  <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <span style={{ color: TEAL, flexShrink: 0, marginTop: 1, fontSize: 11 }}>+</span>{f}
+                  </div>
                 ))}
+                <button onClick={() => onBuyPlan ? onBuyPlan('solo') : onSignup()} style={{
+                  width: '100%', marginTop: 20,
+                  background: 'transparent', color: TEAL,
+                  border: '1px solid rgba(62,207,207,0.3)',
+                  padding: '11px', fontFamily: "'DM Sans',sans-serif",
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', borderRadius: 2,
+                  transition: 'background .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(62,207,207,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >Start Free Trial</button>
               </div>
-              <div>
-                <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 9, color: '#475569', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 12, fontWeight: 700 }}>Legal</div>
-                <Link to="/privacy" style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer', textDecoration: 'none' }}
-                  onMouseEnter={e => e.currentTarget.style.color = GOLD}
-                  onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
-                >Privacy Policy</Link>
-                <Link to="/terms" style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, cursor: 'pointer', textDecoration: 'none' }}
-                  onMouseEnter={e => e.currentTarget.style.color = GOLD}
-                  onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
-                >Terms of Service</Link>
+
+              {/* Small Team - FEATURED */}
+              <div style={{
+                background: 'rgba(28,21,0,0.95)',
+                border: '2px solid ' + GOLD,
+                padding: '32px 24px',
+                position: 'relative', zIndex: 1,
+                borderRadius: 0,
+                boxShadow: '0 0 40px rgba(196,154,60,0.18)',
+              }}>
+                <div style={{
+                  position: 'absolute', top: -1, left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: GOLD, color: '#111',
+                  fontFamily: "'DM Mono',monospace", fontSize: 8,
+                  fontWeight: 700, letterSpacing: '0.15em',
+                  padding: '4px 16px', whiteSpace: 'nowrap',
+                }}>MOST POPULAR</div>
+                <div style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD,
+                  letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 18, marginTop: 12,
+                }}>Small Team</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 44, fontWeight: 800, color: '#f0f4fa', lineHeight: 1 }}>$149</span>
+                  <span style={{ color: '#475569', fontSize: 12 }}>/mo</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#664e1a', marginBottom: 22, lineHeight: 1.55 }}>2–5 FTE staff. The backbone of local EM.</div>
+                {['Every feature included', 'Up to 5 user seats', '1,000 AI calls / month', 'Priority support'].map((f) => (
+                  <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <span style={{ color: GOLD, flexShrink: 0, marginTop: 1, fontSize: 11 }}>+</span>{f}
+                  </div>
+                ))}
+                <button onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()} style={{
+                  width: '100%', marginTop: 20,
+                  background: GOLD, color: '#111',
+                  border: 'none', padding: '12px',
+                  fontFamily: "'Syne','DM Sans',sans-serif",
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer', borderRadius: 2,
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  transition: 'background .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#D4AA5A'}
+                onMouseLeave={e => e.currentTarget.style.background = GOLD}
+                >Start Free Trial</button>
               </div>
-              <div>
-                <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 9, color: '#475569', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 12, fontWeight: 700 }}>Company</div>
-                <Link to="/founder" style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, textDecoration: 'none' }}
-                  onMouseEnter={e => e.currentTarget.style.color = GOLD}
-                  onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
-                >Founder</Link>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>helloplanrr.app@gmail.com</div>
+
+              {/* Full Program */}
+              <div style={{
+                background: 'rgba(14,14,14,0.95)',
+                border: '1px solid rgba(62,207,207,0.18)',
+                padding: '32px 24px', borderRadius: 0,
+              }}>
+                <div style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 9, color: TEAL,
+                  letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 18,
+                }}>Full Program</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 44, fontWeight: 800, color: '#f0f4fa', lineHeight: 1 }}>$199</span>
+                  <span style={{ color: '#475569', fontSize: 12 }}>/mo</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#475569', marginBottom: 22, lineHeight: 1.55 }}>6+ FTE. For established programs scaling up.</div>
+                {['Every feature included', 'Unlimited user seats', '5,000 AI calls / month', 'Dedicated onboarding', 'Phone support'].map((f) => (
+                  <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <span style={{ color: TEAL, flexShrink: 0, marginTop: 1, fontSize: 11 }}>+</span>{f}
+                  </div>
+                ))}
+                <button onClick={() => onBuyPlan ? onBuyPlan('full_program') : onSignup()} style={{
+                  width: '100%', marginTop: 20,
+                  background: 'transparent', color: TEAL,
+                  border: '1px solid rgba(62,207,207,0.3)',
+                  padding: '11px', fontFamily: "'DM Sans',sans-serif",
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', borderRadius: 2,
+                  transition: 'background .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(62,207,207,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >Start Free Trial</button>
+              </div>
+
+              {/* Enterprise */}
+              <div style={{
+                background: 'rgba(14,14,14,0.95)',
+                border: '1px solid #2E3439',
+                padding: '32px 24px', borderRadius: '0 4px 4px 0',
+              }}>
+                <div style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 9, color: B.purple,
+                  letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 18,
+                }}>Enterprise</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 30, fontWeight: 800, color: '#f0f4fa', lineHeight: 1 }}>Custom</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#475569', marginBottom: 22, lineHeight: 1.55 }}>Multi-org contractors, state agencies, and regional coalitions.</div>
+                {['Every feature included', 'Unlimited seats & AI usage', 'Multi-org dashboard', 'Dedicated account manager', 'SLA guarantees', 'Custom integrations'].map((f) => (
+                  <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <span style={{ color: B.purple, flexShrink: 0, marginTop: 1, fontSize: 11 }}>+</span>{f}
+                  </div>
+                ))}
+                <button onClick={onSignup} style={{
+                  width: '100%', marginTop: 20,
+                  background: 'transparent', color: B.purple,
+                  border: '1px solid rgba(139,92,246,0.3)',
+                  padding: '11px', fontFamily: "'DM Sans',sans-serif",
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', borderRadius: 2,
+                  transition: 'background .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(139,92,246,0.07)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >Contact Sales</button>
               </div>
             </div>
-          </div>
-          <div style={{ borderTop: '1px solid #2E3439', paddingTop: 16, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 10, color: '#475569', letterSpacing: '0.08em' }}>
-              &copy; {new Date().getFullYear()} planrr.app. All rights reserved.
-            </div>
-            <div style={{ fontFamily: 'DM Mono,monospace', fontSize: 10, color: '#475569', letterSpacing: '0.08em' }}>
-              Made for emergency managers, by emergency managers.
+
+            {/* Founding strip */}
+            <div style={{
+              marginTop: 16,
+              background: 'rgba(24,18,2,0.9)',
+              border: '1px solid rgba(196,154,60,0.3)',
+              padding: '14px 20px',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD, letterSpacing: '0.15em', textTransform: 'uppercase' }}>⚡ Founding Agency Pricing</span>
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: '#f0f4fa' }}>50% off any plan, locked for life. Closing this month.</span>
+              </div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#475569', letterSpacing: '0.08em' }}>
+                14-day free trial · No credit card required · Discount codes available for shops under 2 FTE
+              </div>
             </div>
           </div>
         </div>
-      </div>
+
+        {/* ── CTA BAND ── */}
+        <div style={{
+          background: 'rgba(13,13,13,0.88)',
+          borderTop: '1px solid rgba(196,154,60,0.22)',
+          borderBottom: '1px solid rgba(196,154,60,0.22)',
+          padding: '72px 40px', textAlign: 'center',
+          position: 'relative', zIndex: 2,
+        }}>
+          <div style={{
+            fontFamily: "'DM Mono',monospace", fontSize: 9, color: TEAL,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            marginBottom: 18, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 12,
+          }}>
+            <div style={{ width: 16, height: 1, background: TEAL }} />
+            The Bottom Line
+            <div style={{ width: 16, height: 1, background: TEAL }} />
+          </div>
+          <h2 style={{
+            fontFamily: "'Syne','DM Sans',sans-serif",
+            fontSize: 'clamp(28px,4vw,48px)',
+            fontWeight: 800, letterSpacing: '-2px',
+            marginBottom: 14, lineHeight: 1.04,
+          }}>
+            The plan won't survive first contact.<br />
+            <span style={{ color: GOLD }}>Your organization will.</span>
+          </h2>
+          <p style={{
+            color: '#8A9BB0', fontSize: 15, fontWeight: 300,
+            marginBottom: 36, maxWidth: 520, margin: '0 auto 36px',
+            lineHeight: 1.78,
+          }}>
+            Bring SAGE into your daily workflow and run a program that improves readiness every week — not just right before an assessment.
+          </p>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup()}
+              style={{
+                background: GOLD, color: '#111', border: 'none',
+                padding: '14px 34px',
+                fontFamily: "'Syne','DM Sans',sans-serif",
+                fontSize: 13, fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                cursor: 'pointer', borderRadius: 2,
+                transition: 'background .15s, transform .1s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#D4AA5A'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = GOLD; e.currentTarget.style.transform = 'translateY(0)'; }}
+            >Start Free Trial</button>
+            <button
+              onClick={onLogin}
+              style={{
+                border: '1px solid rgba(196,154,60,0.28)', color: GOLD,
+                background: 'rgba(196,154,60,0.05)',
+                padding: '13px 26px',
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 11, letterSpacing: '0.1em',
+                cursor: 'pointer', borderRadius: 2,
+              }}
+            >Sign In →</button>
+          </div>
+          <div style={{
+            fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#475569',
+            letterSpacing: '0.1em', marginTop: 20,
+          }}>
+            Founding agency pricing. Locked for life. Direct input into the product roadmap.
+          </div>
+        </div>
+
+        {/* ── SECURITY ── */}
+        <div ref={securityRef} style={{ borderTop: '1px solid rgba(62,207,207,0.12)', background: 'rgba(10,15,15,0.88)', position: 'relative', zIndex: 2 }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 40px' }}>
+            <div style={{
+              fontFamily: "'DM Mono',monospace", fontSize: 10, color: TEAL,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <div style={{ width: 20, height: 1, background: TEAL }} />
+              Security & Compliance
+            </div>
+            <h2 style={{
+              fontFamily: "'Syne','DM Sans',sans-serif",
+              fontSize: 'clamp(24px,3vw,40px)',
+              fontWeight: 800, letterSpacing: '-1.5px', marginBottom: 12,
+            }}>
+              Built for agencies that handle{' '}
+              <span style={{ color: GOLD }}>sensitive data.</span>
+            </h2>
+            <p style={{ color: '#8A9BB0', fontSize: 15, fontWeight: 300, maxWidth: 560, lineHeight: 1.78, marginBottom: 52 }}>
+              Emergency management data demands serious protection. We treat security as a first-class requirement, not an afterthought.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 3 }} className="planrr-security-grid">
+              {[
+                ['HTTPS Everywhere', 'All data in transit is encrypted via TLS 1.2+. No exceptions.'],
+                ['Encryption at Rest', 'All stored data is encrypted at rest via cloud provider-managed keys (AES-256).'],
+                ['Authenticated Access', 'Every API call requires valid auth tokens. Org-scoped access ensures data isolation between agencies.'],
+                ['Activity Logs', 'Complete audit trail of user actions. Know who changed what, and when.'],
+                ['Automated Backups', 'Continuous database backups with point-in-time recovery. Your program data is never at risk.'],
+                ['Secure Infrastructure', 'Hosted on SOC 2-certified cloud infrastructure with network isolation, DDoS protection, and 24/7 monitoring.'],
+              ].map(([t, d]) => (
+                <div key={t} className="planrr-card" style={{ ...cardBase }}>
+                  <div style={{ ...tealAccent, background: TEAL }} />
+                  <div style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 15, fontWeight: 700, marginBottom: 8, color: '#f0f4fa', paddingLeft: 10 }}>{t}</div>
+                  <div style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.68, fontWeight: 300, paddingLeft: 10 }}>{d}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* SOC 2 Roadmap */}
+            <div style={{
+              marginTop: 56,
+              border: '1px solid rgba(196,154,60,0.28)',
+              borderRadius: 4,
+              padding: '36px 40px',
+              background: 'rgba(20,15,2,0.9)',
+              borderLeft: '4px solid ' + GOLD,
+            }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}>
+                SOC 2 Compliance Roadmap
+              </div>
+              <h3 style={{ fontFamily: "'Syne','DM Sans',sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 8, color: '#f0f4fa' }}>
+                On the path to SOC 2 certification
+              </h3>
+              <p style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.7, marginBottom: 32, maxWidth: 560 }}>
+                We are actively pursuing SOC 2 compliance to meet the security and trust requirements of government agencies.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {[
+                  ['Q2 – Q3 2026', 'Policies, access control, and change management frameworks', true],
+                  ['Q3 2026', 'Readiness assessment with independent auditor', true],
+                  ['Q4 2026 – Q1 2027', 'SOC 2 Type I audit and certification', false],
+                  ['Q3 2027', 'SOC 2 Type II audit and certification', false],
+                ].map(([q, desc, active], i) => (
+                  <div key={q} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', position: 'relative' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 20 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: active ? GOLD : '#2E3439', border: active ? 'none' : '2px solid #475569', flexShrink: 0, marginTop: 4 }} />
+                      {i < 3 && <div style={{ width: 2, height: 32, background: active ? 'rgba(196,154,60,0.3)' : '#2E3439' }} />}
+                    </div>
+                    <div style={{ paddingBottom: i < 3 ? 16 : 0 }}>
+                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: active ? GOLD : '#475569', fontWeight: 600, marginBottom: 2 }}>{q}</div>
+                      <div style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.5 }}>{desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── FOOTER ── */}
+        <div style={{
+          borderTop: '1px solid rgba(196,154,60,0.18)',
+          padding: '44px 40px 32px',
+          background: 'rgba(10,10,10,0.95)',
+          position: 'relative', zIndex: 2,
+        }} className="planrr-landing-header">
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 32, marginBottom: 36 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <BrainIcon size={28} color={TEAL} strokeWidth={1.1} />
+                  <Wordmark dark size="md" />
+                </div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#475569', letterSpacing: '0.08em', lineHeight: 1.8, maxWidth: 280 }}>
+                  Emergency management program platform.<br />
+                  EMAP EMS 5-2022 · HSEEP · CPG 201<br />
+                  helloplanrr.app@gmail.com
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}>Product</div>
+                  {[['Platform', () => scrollToSection(platformRef)], ['Pricing', () => scrollToSection(pricingRef)], ['Security', () => scrollToSection(securityRef)], ['FAQ', () => { window.location.href = '/faq'; }]].map(([l, fn]) => (
+                    <div key={l} style={{ marginBottom: 8 }}>
+                      <button onClick={fn} style={{ background: 'none', border: 'none', fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: '#475569', cursor: 'pointer', padding: 0, transition: 'color .15s' }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#94a3b8'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#475569'}
+                      >{l}</button>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}>Legal</div>
+                  {[['Privacy Policy', '/privacy'], ['Terms of Service', '/terms']].map(([l, href]) => (
+                    <div key={l} style={{ marginBottom: 8 }}>
+                      <a href={href} style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: '#475569', textDecoration: 'none', transition: 'color .15s' }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#94a3b8'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#475569'}
+                      >{l}</a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{
+              borderTop: '1px solid rgba(196,154,60,0.1)',
+              paddingTop: 20,
+              display: 'flex', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 10,
+            }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#2E3439', letterSpacing: '0.08em' }}>
+                © 2026 planrr.app · getplanrr.com
+              </div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#2E3439', letterSpacing: '0.08em' }}>
+                EMAP EMS 5-2022 ALIGNED · NOT AFFILIATED WITH EMAP OR IAEM
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>{/* /content wrapper */}
     </div>
   );
 }
