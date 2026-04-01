@@ -188,7 +188,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 @keyframes brain-glow { 0%,100%{box-shadow:0 0 0 0 rgba(62,207,207,0)} 50%{box-shadow:0 0 40px 8px rgba(62,207,207,0.15)} }
 @keyframes spinner { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 @media(max-width:900px){ .lp-3col{grid-template-columns:1fr 1fr!important} .lp-pricing{grid-template-columns:1fr 1fr!important} }
-@media(max-width:600px){ .lp-3col,.lp-pricing{grid-template-columns:1fr!important} .lp-hero-btns{flex-direction:column!important} .lp-hide-mobile{display:none!important} }
+@media(max-width:600px){ .lp-3col,.lp-pricing{grid-template-columns:1fr!important} .lp-hero-btns{flex-direction:column!important} .lp-hide-mobile{display:none!important} .lp-mobile-only{display:block!important} }
 `;
 
 /* --- LOADING SKELETON --------------------------------- */
@@ -23316,7 +23316,6 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
               onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.1)';e.currentTarget.style.color='#94A3B8';}}>Sign In</button>
             <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
           </div>
-          <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={{...LP.ctaPrimary,padding:'9px 18px'}} onMouseEnter={hP} onMouseLeave={lP}>Try Free</button>
         </nav>
 
         {/* ── HERO ── */}
@@ -23721,7 +23720,12 @@ async function parseAuthResponse(r, fallbackMessage) {
   let d = {};
   try { d = await r.json(); } catch {}
   if (!r.ok || d.error) {
-    const message = d?.error?.message || d?.msg || fallbackMessage;
+    const message =
+      d?.error_description ||
+      d?.error?.message ||
+      d?.msg ||
+      d?.message ||
+      fallbackMessage;
     throw new Error(message);
   }
   return d;
@@ -23732,7 +23736,6 @@ async function sbSignIn(email, pw) {
     headers: {
       'Content-Type': 'application/json',
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
     },
     body: JSON.stringify({ email: String(email || '').trim().toLowerCase(), password: pw }),
   });
@@ -23747,7 +23750,6 @@ async function sbSignUp(email, pw, org, name, jur, state) {
     headers: {
       'Content-Type': 'application/json',
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
     },
     body: JSON.stringify({
       email: String(email || '').trim().toLowerCase(),
@@ -23778,7 +23780,6 @@ async function sbReset(email) {
     headers: {
       'Content-Type': 'application/json',
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
     },
     body: JSON.stringify({ email: String(email || '').trim().toLowerCase() }),
   });
@@ -23794,7 +23795,6 @@ async function sbRefreshToken() {
       headers: {
         'Content-Type': 'application/json',
         apikey: SB_KEY,
-        Authorization: 'Bearer ' + SB_KEY,
       },
       body: JSON.stringify({ refresh_token: s.refresh_token }),
     });

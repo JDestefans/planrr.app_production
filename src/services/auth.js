@@ -6,7 +6,13 @@ async function parseAuthResponse(r, fallbackMessage) {
   let d = {};
   try { d = await r.json(); } catch {}
   if (!r.ok || d.error) {
-    const message = d?.error?.message || d?.msg || fallbackMessage;
+    const errorObj = d?.error;
+    const message =
+      d?.error_description ||
+      (typeof errorObj === 'string' ? errorObj : errorObj?.message) ||
+      d?.msg ||
+      d?.message ||
+      fallbackMessage;
     throw new Error(message);
   }
   return d;
@@ -31,7 +37,6 @@ export async function sbSignIn(email, pw) {
     headers: {
       'Content-Type': 'application/json',
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
     },
     body: JSON.stringify({ email: String(email || '').trim().toLowerCase(), password: pw }),
   });
@@ -47,7 +52,6 @@ export async function sbSignUp(email, pw, org, name, jur, state) {
     headers: {
       'Content-Type': 'application/json',
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
     },
     body: JSON.stringify({
       email: String(email || '').trim().toLowerCase(),
@@ -80,7 +84,6 @@ export async function sbReset(email) {
     headers: {
       'Content-Type': 'application/json',
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
     },
     body: JSON.stringify({ email: String(email || '').trim().toLowerCase() }),
   });
