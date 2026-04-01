@@ -25212,6 +25212,7 @@ function AppInner() {
   const [onboarding, setOnboarding] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [subStatus, setSubStatus] = useState(null); // null=loading, 'active'|'trialing'|'none'
+  const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [searchOpen, setSearchOpen] = useState(false);
   const [authed, setAuthed] = useState(() => {
     const status = isLoggedIn();
@@ -25385,7 +25386,6 @@ function AppInner() {
     setFirstRun(true);
     saveData(d);
   }, []);
-  const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   if (!authed)
     return (
       <>
@@ -25427,7 +25427,7 @@ function AppInner() {
                     if (link) {
                       try {
                         const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
-                        const email = s?.user?.email || '';
+                        const email = s?.user?.email || s?.email || '';
                         const url = email ? `${link}?prefilled_email=${encodeURIComponent(email)}` : link;
                         window.location.href = url;
                       } catch {
@@ -25446,7 +25446,7 @@ function AppInner() {
         )}
       </>
     );
-  if (!loaded)
+  if (!loaded || subStatus === null)
     return (
       <div
         style={{
@@ -25506,7 +25506,7 @@ function AppInner() {
                 if (link) {
                   try {
                     const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
-                    const email = s?.user?.email || '';
+                    const email = s?.user?.email || s?.email || '';
                     window.location.href = email ? `${link}?prefilled_email=${encodeURIComponent(email)}` : link;
                   } catch { window.location.href = link; }
                 }
