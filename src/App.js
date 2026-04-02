@@ -1320,6 +1320,19 @@ function isRecentlyCreatedAccount(maxAgeHours = 72) {
     return false;
   }
 }
+
+function getCanvas2dContext(canvas) {
+  if (!canvas) return null;
+  // JSDOM logs noisy "not implemented" errors for canvas APIs; skip animation there.
+  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '')) {
+    return null;
+  }
+  try {
+    return canvas.getContext('2d');
+  } catch {
+    return null;
+  }
+}
 function addActivity(updateData, type, module, detail) {
   updateData((prev) => ({
     ...prev,
@@ -10466,7 +10479,7 @@ function Sidebar({ view, setView, data, notifCount, orgName, onEditOrg, collapse
   useEffect(() => {
     const canvas = sidebarCanvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return;
     let W, H, nodes;
     const resize = () => {
@@ -23181,7 +23194,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return;
     let W, H, nodes;
     const resize = () => {
@@ -23196,20 +23209,20 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
     };
     const draw = () => {
       ctx.clearRect(0, 0, W, H);
-      const MAX = 110;
+      const MAX = 120;
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
           const d = Math.sqrt(dx*dx+dy*dy);
           if (d < MAX) {
-            ctx.strokeStyle = `rgba(62,207,207,${(1-d/MAX)*0.10})`;
-            ctx.lineWidth = 0.4;
+            ctx.strokeStyle = `rgba(62,207,207,${(1-d/MAX)*0.18})`;
+            ctx.lineWidth = 0.45;
             ctx.beginPath(); ctx.moveTo(nodes[i].x,nodes[i].y); ctx.lineTo(nodes[j].x,nodes[j].y); ctx.stroke();
           }
         }
       }
       nodes.forEach(n => {
-        ctx.fillStyle = n.gold ? 'rgba(196,154,60,0.22)' : 'rgba(62,207,207,0.18)';
+        ctx.fillStyle = n.gold ? 'rgba(196,154,60,0.30)' : 'rgba(62,207,207,0.24)';
         ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fill();
         n.x+=n.vx; n.y+=n.vy;
         if(n.x<0||n.x>W) n.vx*=-1; if(n.y<0||n.y>H) n.vy*=-1;
@@ -23272,8 +23285,8 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
 
   const LP = {
     page: { fontFamily:"'DM Sans',sans-serif", background:'#0E0E0E', color:'#FFFFFF', minHeight:'100vh', overflowX:'hidden', position:'relative' },
-    canvas: { position:'fixed', inset:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0, opacity:0.8 },
-    overlay: { position:'fixed', inset:0, background:'linear-gradient(180deg,rgba(14,14,14,0.6) 0%,rgba(14,14,14,0.4) 40%,rgba(14,14,14,0.6) 100%)', pointerEvents:'none', zIndex:1 },
+    canvas: { position:'fixed', inset:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0, opacity:1 },
+    overlay: { position:'fixed', inset:0, background:'linear-gradient(180deg,rgba(14,14,14,0.42) 0%,rgba(14,14,14,0.26) 40%,rgba(14,14,14,0.42) 100%)', pointerEvents:'none', zIndex:1 },
     content: { position:'relative', zIndex:2 },
     nav: { position:'sticky', top:0, zIndex:50, padding:'0 clamp(20px,4vw,52px)', height:58, display:'flex', alignItems:'center', justifyContent:'space-between', background:scrolled?'rgba(10,10,10,0.97)':'rgba(14,14,14,0.88)', backdropFilter:'blur(18px) saturate(1.3)', borderBottom:`1px solid ${scrolled?'rgba(196,154,60,0.28)':'rgba(196,154,60,0.14)'}`, transition:'all 0.25s ease' },
     section: { maxWidth:1120, margin:'0 auto', padding:'84px clamp(20px,4vw,52px)' },
@@ -23726,7 +23739,7 @@ function AmbientNodeBackground({ dark = true, density = 3600, maxLink = 96 }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return;
     let W = 0;
     let H = 0;
@@ -25505,7 +25518,6 @@ function AppInner() {
   const hasLegacyAccountData = !!(
     data &&
     (
-      data.orgName ||
       data.welcomeDismissed ||
       (data.training || []).length > 0 ||
       (data.exercises || []).length > 0 ||
@@ -25598,8 +25610,6 @@ function AppInner() {
         </div>
       </div>
     );
-  if (onboarding)
-    return <Onboarding onComplete={handleOnboard} />;
   if (shouldShowPaywall) {
     return (
       <div style={{
@@ -25659,6 +25669,8 @@ function AppInner() {
       </div>
     );
   }
+  if (onboarding)
+    return <Onboarding onComplete={handleOnboard} />;
   const checkoutSuccess = new URLSearchParams(window.location.search).get('checkout') === 'success';
   const notifications = buildNotifications(data);
   return (
