@@ -1223,6 +1223,17 @@ const PARTNER_SAFEGUARD_PLAN_TYPES = new Set([
   'Communications Plan',
   'Evacuation Plan',
 ]);
+const PLAN_EMAP_REFS = {
+  EOP: '4.5',
+  COOP: '4.4',
+  'COG Plan': '4.4',
+  'Hazard Mitigation Plan': '4.2',
+  'Recovery Plan': '4.5',
+  'Communications Plan': '4.8',
+  'Evacuation Plan': '4.5',
+  Annex: '4.5',
+  Other: '4.5',
+};
 function planTypeRequiresPartnerSafeguard(type) {
   return PARTNER_SAFEGUARD_PLAN_TYPES.has(type);
 }
@@ -1245,6 +1256,70 @@ function getPlanSafeguardGaps(plan) {
   if (!plan.signoffDate) missing.push('signoff date');
   if (!plan.signoffConfirmed) missing.push('final signoff confirmation');
   return missing;
+}
+function stripFileExtension(name) {
+  if (!name) return '';
+  return String(name).replace(/\.[^/.]+$/, '').trim();
+}
+function inferPlanTypeFromIntake(docName, docType, mappings = []) {
+  const text = `${docName || ''} ${docType || ''}`.toLowerCase();
+  const stdIds = (mappings || []).map((m) => String(m?.stdId || ''));
+  const has = (...terms) => terms.some((term) => text.includes(term));
+  const hasWord = (word) =>
+    new RegExp(`(^|[^a-z0-9])${word}([^a-z0-9]|$)`, 'i').test(text);
+  if (
+    has('emergency operations plan', ' emergency operations ', 'eop-', 'eop_') ||
+    hasWord('eop')
+  )
+    return 'EOP';
+  if (
+    has('continuity of operations', 'coop-', 'coop_') ||
+    hasWord('coop')
+  )
+    return 'COOP';
+  if (
+    has('continuity of government', 'cog-', 'cog_') ||
+    hasWord('cog')
+  )
+    return 'COG Plan';
+  if (has('hazard mitigation plan', 'hmp-', 'hmp_') || hasWord('hmp'))
+    return 'Hazard Mitigation Plan';
+  if (has('recovery plan')) return 'Recovery Plan';
+  if (has('communications plan', 'communication plan', 'comms plan'))
+    return 'Communications Plan';
+  if (has('evacuation plan')) return 'Evacuation Plan';
+  if (has('annex')) return 'Annex';
+  if (
+    has(
+      'after action',
+      'aar',
+      'training',
+      'certificate',
+      'mou',
+      'mutual aid',
+      'budget',
+      'invoice',
+      'grant'
+    )
+  ) {
+    return null;
+  }
+  if (stdIds.some((id) => id.startsWith('4.4.'))) return 'COOP';
+  if (stdIds.some((id) => id.startsWith('4.2.'))) return 'Hazard Mitigation Plan';
+  if (stdIds.some((id) => id.startsWith('4.8.'))) return 'Communications Plan';
+  if (stdIds.some((id) => id.startsWith('4.5.')) && has('plan')) return 'EOP';
+  return null;
+}
+function ensurePlanCollaborationDefaults(plan) {
+  return {
+    ...plan,
+    collaborators: Array.isArray(plan?.collaborators) ? plan.collaborators : [],
+    collabRequests: Array.isArray(plan?.collabRequests) ? plan.collabRequests : [],
+    collabHistory: Array.isArray(plan?.collabHistory) ? plan.collabHistory : [],
+  };
+}
+function planAllowsCollaboration(plan) {
+  return ['draft', 'review-due'].includes(plan?.status);
 }
 const timeAgo = (ts) => {
   if (!ts) return null;
@@ -8486,6 +8561,62 @@ function PartnerRegistry({ data, setData }) {
 function PlanLibrary({ data, setData }) {
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const currentUser = useMemo(() => getCurrentUserIdentity(), []);
+  const [inviteDrafts, setInviteDrafts] = useState({});
+  const [requestDrafts, setRequestDrafts] = useState({});
+  const plans = useMemo(
+    () => (data.plans || []).map((p) => ensurePlanCollaborationDefaults(p)),
+    [data.plans]
+  );
+  const mutatePlan = useCallback(
+    (planId, mutate) => {
+      setData((prev) => ({
+        ...prev,
+        plans: (prev.plans || []).map((p) => {
+          const base = ensurePlanCollaborationDefaults(p);
+          return base.id === planId ? mutate(base) : base;
+        }),
+      }));
+    },
+    [setData]
+  );
+  const getInviteDraft = useCallback(
+    (planId) =>
+      inviteDrafts[planId] || {
+        name: '',
+        email: '',
+        permission: 'comment_only',
+      },
+    [inviteDrafts]
+  );
+  const setInviteField = useCallback((planId, field, value) => {
+    setInviteDrafts((prev) => ({
+      ...prev,
+      [planId]: { ...(prev[planId] || {}), [field]: value },
+    }));
+  }, []);
+  const getRequestDraft = useCallback(
+    (planId, plan) =>
+      requestDrafts[planId] || {
+        collaboratorId: (plan?.collaborators || [])[0]?.id || '',
+        kind: 'comment',
+        section: '',
+        summary: '',
+        proposedText: '',
+      },
+    [requestDrafts]
+  );
+  const setRequestField = useCallback((planId, field, value) => {
+    setRequestDrafts((prev) => ({
+      ...prev,
+      [planId]: { ...(prev[planId] || {}), [field]: value },
+    }));
+  }, []);
+  const buildInviteCode = () =>
+    uid()
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(-8)
+      .toUpperCase();
   const updatePlanStatus = useCallback((plan, nextStatus) => {
     if (nextStatus === 'current') {
       const gaps = getPlanSafeguardGaps(plan);
@@ -8497,11 +8628,8 @@ function PlanLibrary({ data, setData }) {
         return;
       }
     }
-    setData((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) => (p.id === plan.id ? { ...p, status: nextStatus } : p)),
-    }));
-  }, [getPlanSafeguardGaps, setData]);
+    mutatePlan(plan.id, (target) => ({ ...target, status: nextStatus }));
+  }, [mutatePlan]);
   const [form, setForm] = useState({
     name: '',
     type: 'EOP',
@@ -8522,14 +8650,6 @@ function PlanLibrary({ data, setData }) {
     'Annex',
     'Other',
   ];
-  const EMAP_REFS = {
-    EOP: '4.5',
-    COOP: '4.4',
-    'COG Plan': '4.4',
-    'Hazard Mitigation Plan': '4.2',
-    'Recovery Plan': '4.5',
-    'Communications Plan': '4.8',
-  };
   const STATUS_OPTS = [
     { v: 'current', l: 'Current', c: B.green },
     { v: 'review-due', l: 'Review Due', c: B.amber },
@@ -8546,7 +8666,7 @@ function PlanLibrary({ data, setData }) {
           ...form,
           id: uid(),
           docs: [],
-          emapRef: EMAP_REFS[form.type] || '4.5',
+          emapRef: PLAN_EMAP_REFS[form.type] || '4.5',
           addedAt: Date.now(),
           requirePartnerSafeguard: planTypeRequiresPartnerSafeguard(form.type),
           partnerReviewDate: '',
@@ -8558,6 +8678,9 @@ function PlanLibrary({ data, setData }) {
           signoffBy: '',
           signoffDate: '',
           signoffConfirmed: false,
+          collaborators: [],
+          collabRequests: [],
+          collabHistory: [],
         },
       ],
     }));
@@ -8573,10 +8696,114 @@ function PlanLibrary({ data, setData }) {
     setShowForm(false);
   };
   const update = (id, f, v) =>
-    setData((prev) => ({
+    mutatePlan(id, (p) => ({ ...p, [f]: v }));
+  const inviteCollaborator = (plan) => {
+    const draft = getInviteDraft(plan.id);
+    const email = String(draft.email || '').trim().toLowerCase();
+    if (!email) return;
+    mutatePlan(plan.id, (target) => {
+      const existing = (target.collaborators || []).find(
+        (c) => String(c.email || '').toLowerCase() === email
+      );
+      const nextCollaborator = existing
+        ? {
+            ...existing,
+            name: draft.name || existing.name || email.split('@')[0],
+            permission: draft.permission || existing.permission || 'comment_only',
+            status: 'active',
+            invitedAt: existing.invitedAt || Date.now(),
+            invitedBy:
+              currentUser.name || currentUser.email || existing.invitedBy || 'Plan Author',
+            inviteCode: existing.inviteCode || buildInviteCode(),
+            accessScope: `plan:${target.id}`,
+          }
+        : {
+            id: uid(),
+            name: draft.name || email.split('@')[0],
+            email,
+            permission: draft.permission || 'comment_only',
+            status: 'active',
+            invitedAt: Date.now(),
+            invitedBy: currentUser.name || currentUser.email || 'Plan Author',
+            inviteCode: buildInviteCode(),
+            accessScope: `plan:${target.id}`,
+          };
+      const collaborators = existing
+        ? target.collaborators.map((c) => (c.id === existing.id ? nextCollaborator : c))
+        : [...(target.collaborators || []), nextCollaborator];
+      return { ...target, collaborators };
+    });
+    setInviteDrafts((prev) => ({
       ...prev,
-      plans: prev.plans.map((p) => (p.id === id ? { ...p, [f]: v } : p)),
+      [plan.id]: { ...getInviteDraft(plan.id), email: '', name: '' },
     }));
+  };
+  const submitCollabRequest = (plan) => {
+    const draft = getRequestDraft(plan.id, plan);
+    const summary = String(draft.summary || '').trim();
+    if (!summary) return;
+    mutatePlan(plan.id, (target) => {
+      const collaborator =
+        (target.collaborators || []).find((c) => c.id === draft.collaboratorId) || null;
+      const requestedKind = draft.kind === 'update' ? 'update' : 'comment';
+      const resolvedKind =
+        requestedKind === 'update' && collaborator?.permission !== 'propose_updates'
+          ? 'comment'
+          : requestedKind;
+      const req = {
+        id: uid(),
+        collaboratorId: collaborator?.id || null,
+        collaboratorName: collaborator?.name || 'Outside collaborator',
+        collaboratorEmail: collaborator?.email || '',
+        submittedBy: collaborator?.name || currentUser.name || 'Outside collaborator',
+        submittedByEmail: collaborator?.email || currentUser.email || '',
+        kind: resolvedKind,
+        section: String(draft.section || '').trim(),
+        summary,
+        proposedText:
+          resolvedKind === 'update' ? String(draft.proposedText || '').trim() : '',
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+      return { ...target, collabRequests: [req, ...(target.collabRequests || [])] };
+    });
+    setRequestDrafts((prev) => ({
+      ...prev,
+      [plan.id]: {
+        ...getRequestDraft(plan.id, plan),
+        summary: '',
+        proposedText: '',
+      },
+    }));
+  };
+  const decideCollabRequest = (plan, requestId, decision) => {
+    mutatePlan(plan.id, (target) => {
+      const existing = (target.collabRequests || []).find((r) => r.id === requestId);
+      if (!existing || existing.status !== 'pending') return target;
+      const resolved = {
+        ...existing,
+        status: decision,
+        decidedAt: Date.now(),
+        decidedBy: currentUser.name || currentUser.email || 'Plan author',
+        decidedByEmail: currentUser.email || '',
+      };
+      const shouldAppendNote =
+        decision === 'approved' &&
+        resolved.kind === 'update' &&
+        String(resolved.proposedText || '').trim();
+      const noteLine = shouldAppendNote
+        ? `${today()} approved collaborator update (${resolved.section || 'General'}): ${resolved.proposedText}`
+        : '';
+      return {
+        ...target,
+        notes: noteLine ? `${target.notes ? `${target.notes}\n` : ''}${noteLine}` : target.notes,
+        collabRequests: target.collabRequests.map((r) =>
+          r.id === requestId ? resolved : r
+        ),
+        collabHistory: [resolved, ...(target.collabHistory || [])].slice(0, 100),
+      };
+    });
+  };
   const remove = (id) =>
     setData((prev) => ({
       ...prev,
@@ -8604,8 +8831,8 @@ function PlanLibrary({ data, setData }) {
             Plan Library
           </h1>
           <p style={{ color: B.faint, fontSize: 13, marginTop: 2 }}>
-            EMAP 4.4, 4.5, 4.8 - {data.plans.length} plans -{' '}
-            {data.plans.filter((p) => p.status === 'current').length} current
+            EMAP 4.4, 4.5, 4.8 - {plans.length} plans -{' '}
+            {plans.filter((p) => p.status === 'current').length} current
           </p>
         </div>
         <CoachBanner moduleId="plans" />
@@ -8719,13 +8946,13 @@ function PlanLibrary({ data, setData }) {
           </div>
         </div>
       )}
-      {data.plans.length === 0 ? (
+      {plans.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: '32px', color: B.faint }}>
           No plans yet
         </Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {data.plans.map((plan) => {
+          {plans.map((plan) => {
             const sc =
               STATUS_OPTS.find((s) => s.v === plan.status) || STATUS_OPTS[0];
             const rd = daysUntil(plan.nextReview);
@@ -8743,6 +8970,10 @@ function PlanLibrary({ data, setData }) {
             const safeguardReady = safeguardGaps.length === 0;
             const safeguardRequired =
               plan.requirePartnerSafeguard ?? planTypeRequiresPartnerSafeguard(plan.type);
+            const collabOpen = planAllowsCollaboration(plan);
+            const pendingRequests = (plan.collabRequests || []).filter(
+              (r) => r.status === 'pending'
+            ).length;
             return (
               <div
                 key={plan.id}
@@ -8857,6 +9088,17 @@ function PlanLibrary({ data, setData }) {
                         <span>
                           📎 {plan.docs.length} file
                           {plan.docs.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {(plan.collaborators || []).length > 0 && (
+                        <span>
+                          🤝 {(plan.collaborators || []).filter((c) => c.status === 'active').length} collaborator
+                          {(plan.collaborators || []).filter((c) => c.status === 'active').length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {pendingRequests > 0 && (
+                        <span style={{ color: B.amber, fontWeight: 700 }}>
+                          {pendingRequests} pending collaborator {pendingRequests === 1 ? 'request' : 'requests'}
                         </span>
                       )}
                     </div>
@@ -9096,6 +9338,335 @@ function PlanLibrary({ data, setData }) {
                         )
                       }
                     />
+                    <div
+                      style={{
+                        marginTop: 10,
+                        border: `1px solid ${B.border}`,
+                        borderRadius: 8,
+                        background: '#fff',
+                        padding: '12px 12px',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700, color: B.text, marginBottom: 6 }}>
+                        Plan collaboration (document-scoped)
+                      </div>
+                      <div style={{ fontSize: 11, color: B.faint, marginBottom: 10, lineHeight: 1.5 }}>
+                        Invite outside partners to <strong>this plan only</strong>. They submit comments or proposed updates, and the plan author reviews each request before it is accepted.
+                      </div>
+                      {!collabOpen && (
+                        <div
+                          style={{
+                            marginBottom: 10,
+                            fontSize: 11,
+                            color: B.amber,
+                            background: B.amberLight,
+                            border: `1px solid ${B.amberBorder}`,
+                            borderRadius: 6,
+                            padding: '8px 10px',
+                          }}
+                        >
+                          Collaboration intake is active while the plan is in Draft or Review Due status.
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr 170px auto',
+                          gap: 8,
+                          alignItems: 'end',
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div>
+                          <Label>Collaborator name</Label>
+                          <FInput
+                            value={getInviteDraft(plan.id).name || ''}
+                            onChange={(v) => setInviteField(plan.id, 'name', v)}
+                            placeholder="County public works lead"
+                          />
+                        </div>
+                        <div>
+                          <Label>Email</Label>
+                          <FInput
+                            value={getInviteDraft(plan.id).email || ''}
+                            onChange={(v) => setInviteField(plan.id, 'email', v)}
+                            placeholder="partner@agency.gov"
+                          />
+                        </div>
+                        <div>
+                          <Label>Permission</Label>
+                          <FSel
+                            value={getInviteDraft(plan.id).permission || 'comment_only'}
+                            onChange={(v) => setInviteField(plan.id, 'permission', v)}
+                          >
+                            <option value="comment_only">Comments only</option>
+                            <option value="propose_updates">Comments + updates</option>
+                          </FSel>
+                        </div>
+                        <Btn
+                          label="Invite"
+                          onClick={() => inviteCollaborator(plan)}
+                          disabled={!collabOpen || !String(getInviteDraft(plan.id).email || '').trim()}
+                          primary
+                        />
+                      </div>
+                      {(plan.collaborators || []).length > 0 && (
+                        <div style={{ marginBottom: 10 }}>
+                          {(plan.collaborators || []).map((c) => (
+                            <div
+                              key={c.id}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr auto auto auto',
+                                gap: 8,
+                                alignItems: 'center',
+                                fontSize: 11,
+                                border: `1px solid ${B.border}`,
+                                borderRadius: 6,
+                                padding: '7px 8px',
+                                marginBottom: 6,
+                                background: '#f8fafc',
+                              }}
+                            >
+                              <div>
+                                <div style={{ color: B.text, fontWeight: 600 }}>
+                                  {c.name || c.email}
+                                </div>
+                                <div style={{ color: B.faint }}>
+                                  {c.email} · {c.permission === 'propose_updates' ? 'Can propose updates' : 'Comments only'} · Scope: this plan only
+                                </div>
+                              </div>
+                              <Tag
+                                label={c.status === 'active' ? 'Active' : 'Paused'}
+                                color={c.status === 'active' ? B.green : B.amber}
+                                bg={c.status === 'active' ? B.greenLight : B.amberLight}
+                                border={c.status === 'active' ? B.greenBorder : B.amberBorder}
+                              />
+                              <Tag
+                                label={`Code ${c.inviteCode || 'N/A'}`}
+                                color={B.tealDark}
+                                bg={B.tealLight}
+                                border={B.tealBorder}
+                              />
+                              <button
+                                onClick={() =>
+                                  mutatePlan(plan.id, (target) => ({
+                                    ...target,
+                                    collaborators: (target.collaborators || []).map((x) =>
+                                      x.id === c.id
+                                        ? { ...x, status: x.status === 'active' ? 'paused' : 'active' }
+                                        : x
+                                    ),
+                                  }))
+                                }
+                                style={{
+                                  border: `1px solid ${B.border}`,
+                                  borderRadius: 6,
+                                  background: '#fff',
+                                  color: B.text,
+                                  fontSize: 11,
+                                  padding: '6px 8px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {c.status === 'active' ? 'Pause' : 'Activate'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(plan.collaborators || []).length > 0 && (
+                        <div
+                          style={{
+                            border: `1px solid ${B.border}`,
+                            borderRadius: 6,
+                            padding: '9px 9px',
+                            marginBottom: 10,
+                            background: '#fafcfc',
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: B.text, fontWeight: 700, marginBottom: 8 }}>
+                            Record collaborator comment / update request
+                          </div>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1.1fr 140px 1fr auto',
+                              gap: 8,
+                              marginBottom: 8,
+                              alignItems: 'end',
+                            }}
+                          >
+                            <div>
+                              <Label>Collaborator</Label>
+                              <FSel
+                                value={getRequestDraft(plan.id, plan).collaboratorId || ''}
+                                onChange={(v) => setRequestField(plan.id, 'collaboratorId', v)}
+                              >
+                                {(plan.collaborators || [])
+                                  .filter((c) => c.status === 'active')
+                                  .map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name || c.email}
+                                    </option>
+                                  ))}
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Request type</Label>
+                              <FSel
+                                value={getRequestDraft(plan.id, plan).kind || 'comment'}
+                                onChange={(v) => setRequestField(plan.id, 'kind', v)}
+                              >
+                                <option value="comment">Comment</option>
+                                <option value="update">Update proposal</option>
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Section</Label>
+                              <FInput
+                                value={getRequestDraft(plan.id, plan).section || ''}
+                                onChange={(v) => setRequestField(plan.id, 'section', v)}
+                                placeholder="Annex B / ESF 8"
+                              />
+                            </div>
+                            <Btn
+                              label="Submit request"
+                              onClick={() => submitCollabRequest(plan)}
+                              disabled={
+                                !collabOpen ||
+                                !(plan.collaborators || []).some((c) => c.status === 'active') ||
+                                !String(getRequestDraft(plan.id, plan).summary || '').trim() ||
+                                (getRequestDraft(plan.id, plan).kind === 'update' &&
+                                  !String(getRequestDraft(plan.id, plan).proposedText || '').trim())
+                              }
+                              primary
+                            />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <Label>Comment / requested change</Label>
+                            <FTextarea
+                              rows={2}
+                              value={getRequestDraft(plan.id, plan).summary || ''}
+                              onChange={(v) => setRequestField(plan.id, 'summary', v)}
+                              placeholder="Describe the issue, question, or requested change."
+                            />
+                          </div>
+                          {getRequestDraft(plan.id, plan).kind === 'update' && (
+                            <div>
+                              <Label>Proposed replacement text</Label>
+                              <FTextarea
+                                rows={2}
+                                value={getRequestDraft(plan.id, plan).proposedText || ''}
+                                onChange={(v) => setRequestField(plan.id, 'proposedText', v)}
+                                placeholder="Paste suggested wording to be reviewed by the plan author."
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {(plan.collabRequests || []).length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, color: B.text, fontWeight: 700, marginBottom: 8 }}>
+                            Pending and recent collaboration requests
+                          </div>
+                          {(plan.collabRequests || []).slice(0, 8).map((r) => (
+                            <div
+                              key={r.id}
+                              style={{
+                                border: `1px solid ${B.border}`,
+                                borderRadius: 6,
+                                background: '#f8fafc',
+                                padding: '8px 9px',
+                                marginBottom: 6,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 8,
+                                  alignItems: 'center',
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <div style={{ fontSize: 11, fontWeight: 700, color: B.text }}>
+                                  {r.kind === 'update' ? 'Update proposal' : 'Comment'} from {r.collaboratorName}
+                                  {r.section ? ` · ${r.section}` : ''}
+                                </div>
+                                <Tag
+                                  label={
+                                    r.status === 'pending'
+                                      ? 'Pending author approval'
+                                      : r.status === 'approved'
+                                      ? 'Approved'
+                                      : 'Rejected'
+                                  }
+                                  color={
+                                    r.status === 'pending'
+                                      ? B.amber
+                                      : r.status === 'approved'
+                                      ? B.green
+                                      : B.red
+                                  }
+                                  bg={
+                                    r.status === 'pending'
+                                      ? B.amberLight
+                                      : r.status === 'approved'
+                                      ? B.greenLight
+                                      : B.redLight
+                                  }
+                                  border={
+                                    r.status === 'pending'
+                                      ? B.amberBorder
+                                      : r.status === 'approved'
+                                      ? B.greenBorder
+                                      : B.redBorder
+                                  }
+                                />
+                              </div>
+                              <div style={{ fontSize: 11, color: B.faint, marginBottom: 4, lineHeight: 1.45 }}>
+                                {r.summary}
+                              </div>
+                              {r.kind === 'update' && r.proposedText && (
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: B.text,
+                                    background: '#fff',
+                                    border: `1px solid ${B.border}`,
+                                    borderRadius: 5,
+                                    padding: '6px 7px',
+                                    marginBottom: 6,
+                                  }}
+                                >
+                                  {r.proposedText}
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                <div style={{ fontSize: 10, color: B.faint }}>
+                                  Submitted {timeAgo(r.createdAt) || fmtDate(new Date(r.createdAt).toISOString().split('T')[0])}
+                                  {r.decidedBy ? ` · ${r.status} by ${r.decidedBy}` : ''}
+                                </div>
+                                {r.status === 'pending' && (
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <Btn
+                                      label="Approve"
+                                      onClick={() => decideCollabRequest(plan, r.id, 'approved')}
+                                      primary
+                                    />
+                                    <Btn
+                                      label="Reject"
+                                      onClick={() => decideCollabRequest(plan, r.id, 'rejected')}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -19661,6 +20232,7 @@ function BulkIntake({ data, updateData }) {
     setProcessing(true);
     setResults([]);
     setDone(false);
+    const intakeUser = getCurrentUserIdentity();
     const processed = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -19770,9 +20342,12 @@ function BulkIntake({ data, updateData }) {
         processed.push(err_result);
       }
     }
-    // Apply all mappings to standards
+    // Apply mappings to standards and auto-ingest plan-like docs into Plan Library
+    let plansCreated = 0;
+    let plansUpdated = 0;
     updateData((prev) => {
       const stds = { ...prev.standards };
+      const plans = (prev.plans || []).map((p) => ensurePlanCollaborationDefaults(p));
       const priority = {
         compliant: 3,
         in_progress: 2,
@@ -19804,8 +20379,72 @@ function BulkIntake({ data, updateData }) {
             updatedAt: Date.now(),
           };
         });
+        const inferredType = inferPlanTypeFromIntake(
+          docResult.name,
+          docResult.docType,
+          docResult.mappings
+        );
+        if (!inferredType) return;
+        const normalizedName = stripFileExtension(docResult.name);
+        const newDocForPlan = {
+          id: uid(),
+          name: docResult.name,
+          size: docResult.size,
+          uploadedAt: Date.now(),
+          source: 'bulk_intake',
+          docType: docResult.docType || 'Document',
+          mappedStandards: (docResult.mappings || []).map((m) => m.stdId),
+        };
+        const existingIdx = plans.findIndex((p) => {
+          const sameType = p.type === inferredType;
+          const sameName =
+            stripFileExtension(p.name).toLowerCase() === normalizedName.toLowerCase();
+          return sameType && (sameName || p.name === docResult.name);
+        });
+        if (existingIdx >= 0) {
+          const target = ensurePlanCollaborationDefaults(plans[existingIdx]);
+          plans[existingIdx] = {
+            ...target,
+            docs: [...(target.docs || []), newDocForPlan],
+            lastReview: target.lastReview || today(),
+            owner: target.owner || prev.emName || intakeUser.name || '',
+            notes: target.notes
+              ? target.notes
+              : `Auto-created evidence link from bulk intake (${docResult.docType || 'Document'}).`,
+          };
+          plansUpdated += 1;
+        } else {
+          plans.push({
+            id: uid(),
+            name: normalizedName || `${inferredType} (${docResult.docType || 'Document'})`,
+            type: inferredType,
+            version: '1.0',
+            lastReview: today(),
+            nextReview: '',
+            owner: prev.emName || '',
+            status: 'draft',
+            docs: [newDocForPlan],
+            emapRef: PLAN_EMAP_REFS[inferredType] || '4.5',
+            addedAt: Date.now(),
+            requirePartnerSafeguard: planTypeRequiresPartnerSafeguard(inferredType),
+            partnerReviewDate: '',
+            partnerReviewParticipants: '',
+            partnerReviewAttested: false,
+            partnerReviewAck: '',
+            partnerExerciseDate: '',
+            partnerExerciseNotes: '',
+            signoffBy: '',
+            signoffDate: '',
+            signoffConfirmed: false,
+            collaborators: [],
+            collabRequests: [],
+            collabHistory: [],
+            notes: `Auto-created from bulk intake (${docResult.docType || 'Document'}).`,
+          });
+          plansCreated += 1;
+        }
       });
-      return { ...prev, standards: stds };
+      return { ...prev, standards: stds, plans };
     });
     addActivity(
       updateData,
@@ -19814,7 +20453,7 @@ function BulkIntake({ data, updateData }) {
       `Bulk intake: ${processed.length} documents analyzed, ${
         [...new Set(processed.flatMap((r) => r.mappings.map((m) => m.stdId)))]
           .length
-      } standards updated`
+      } standards updated${plansCreated || plansUpdated ? `, ${plansCreated} plans added, ${plansUpdated} plans linked` : ''}`
     );
     setCurrentFile(null);
     setProcessing(false);
