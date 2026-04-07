@@ -26296,9 +26296,9 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
           <div style={{ marginTop: 20, maxWidth: 760 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
               {[
-                ['Problem', 'Critical actions buried in email and static docs.'],
-                ['Proof', 'Live queue + approvals + audit trail with EMAP context.'],
-                ['Outcome', 'Fewer surprises, faster assessor-ready evidence.'],
+                ['Problem', 'Critical actions buried across plans, training logs, AARs, and partner files.'],
+                ['Proof', 'One operating picture with continuity controls, approvals, ownership, and audit trail.'],
+                ['Outcome', 'Faster decisions, stronger continuity, and executive-ready reporting on demand.'],
               ].map(([t, d]) => (
                 <div key={t} style={{ background: 'rgba(20,20,20,0.88)', border: '1px solid rgba(255,255,255,0.08)', padding: '12px 14px' }}>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{t}</div>
@@ -26312,7 +26312,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
               Product proof
             </div>
             <div style={{ fontSize: 13, color: '#C6D2DD', lineHeight: 1.65 }}>
-              Dashboard now includes team governance and security posture signals (member roles, pending approvals, MFA coverage) so leaders can assess readiness in seconds.
+              Cross-module dashboards now surface continuity readiness, workforce coverage, corrective action closure, collaboration approvals, and security posture in one view.
             </div>
           </div>
         </div>
@@ -26320,7 +26320,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
         {/* ── STATS ── */}
         <div style={{borderTop:'1px solid rgba(196,154,60,0.18)',borderBottom:'1px solid rgba(196,154,60,0.18)',background:'rgba(10,10,10,0.88)'}}>
           <div className="lp-stats" style={{maxWidth:1120,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>
-            {[['73','EMAP Standards','Tracked'],['32','FEMA Core','Capabilities'],['100%','End-to-End','EM System'],['SAGE','Your AI','Program Partner']].map(([n,l1,l2],i)=>(
+            {[['12','Operational Modules','Connected'],['73','EMAP Standards','Embedded'],['365','Readiness Cycle','Always On'],['SAGE','Your AI','Program Partner']].map(([n,l1,l2],i)=>(
               <div key={l1} style={{padding:'28px clamp(18px,3vw,44px)',borderRight:i<3?'1px solid rgba(196,154,60,0.1)':'none'}}>
                 <div style={{fontFamily:"'Syne','DM Sans',sans-serif",fontSize:n==='SAGE'?28:40,fontWeight:800,color:GOLD,lineHeight:1,marginBottom:8,letterSpacing:n==='SAGE'?'-0.5px':'-1.5px'}}>{n}</div>
                 <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:'#475569',letterSpacing:'0.13em',textTransform:'uppercase',lineHeight:1.7}}>{l1}<br/>{l2}</div>
@@ -26341,7 +26341,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                 ))}
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {['EMAP EMS 5-2022 aligned', 'Role-based approvals', 'MFA + SSO policy-ready', 'Share links with expiry/revocation'].map((x) => (
+                {['Incident + exercise closed loop', 'COOP continuity controls', 'Role-based approvals + audit trail', 'MFA + secure external sharing'].map((x) => (
                   <span key={x} style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:B.teal, border:'1px solid rgba(62,207,207,0.22)', background:'rgba(62,207,207,0.08)', padding:'3px 8px' }}>
                     {x}
                   </span>
@@ -26698,7 +26698,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                   </div>
                   <span style={{fontFamily:"'Oxanium','DM Sans',sans-serif",fontWeight:800,fontSize:16,color:'#FFFFFF'}}>planrr<span style={{color:GOLD}}>.app</span></span>
                 </div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:'#475569',letterSpacing:'0.08em',lineHeight:1.8,maxWidth:280}}>Emergency management platform.<br/>EMAP EMS 5-2022 · HSEEP · CPG 201<br/>helloplanrr.app@gmail.com</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:'#475569',letterSpacing:'0.08em',lineHeight:1.8,maxWidth:280}}>Emergency management operating system.<br/>Operations · Continuity · Readiness · Reporting<br/>helloplanrr.app@gmail.com</div>
               </div>
               <div style={{display:'flex',gap:48,flexWrap:'wrap'}}>
                 <div>
