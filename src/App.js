@@ -1223,6 +1223,17 @@ const PARTNER_SAFEGUARD_PLAN_TYPES = new Set([
   'Communications Plan',
   'Evacuation Plan',
 ]);
+const PLAN_EMAP_REFS = {
+  EOP: '4.5',
+  COOP: '4.4',
+  'COG Plan': '4.4',
+  'Hazard Mitigation Plan': '4.2',
+  'Recovery Plan': '4.5',
+  'Communications Plan': '4.8',
+  'Evacuation Plan': '4.5',
+  Annex: '4.5',
+  Other: '4.5',
+};
 function planTypeRequiresPartnerSafeguard(type) {
   return PARTNER_SAFEGUARD_PLAN_TYPES.has(type);
 }
@@ -1245,6 +1256,220 @@ function getPlanSafeguardGaps(plan) {
   if (!plan.signoffDate) missing.push('signoff date');
   if (!plan.signoffConfirmed) missing.push('final signoff confirmation');
   return missing;
+}
+function stripFileExtension(name) {
+  if (!name) return '';
+  return String(name).replace(/\.[^/.]+$/, '').trim();
+}
+function inferPlanTypeFromIntake(docName, docType, mappings = []) {
+  const text = `${docName || ''} ${docType || ''}`.toLowerCase();
+  const stdIds = (mappings || []).map((m) => String(m?.stdId || ''));
+  const has = (...terms) => terms.some((term) => text.includes(term));
+  const hasWord = (word) =>
+    new RegExp(`(^|[^a-z0-9])${word}([^a-z0-9]|$)`, 'i').test(text);
+  if (
+    has('emergency operations plan', ' emergency operations ', 'eop-', 'eop_') ||
+    hasWord('eop')
+  )
+    return 'EOP';
+  if (
+    has('continuity of operations', 'coop-', 'coop_') ||
+    hasWord('coop')
+  )
+    return 'COOP';
+  if (
+    has('continuity of government', 'cog-', 'cog_') ||
+    hasWord('cog')
+  )
+    return 'COG Plan';
+  if (has('hazard mitigation plan', 'hmp-', 'hmp_') || hasWord('hmp'))
+    return 'Hazard Mitigation Plan';
+  if (has('recovery plan')) return 'Recovery Plan';
+  if (has('communications plan', 'communication plan', 'comms plan'))
+    return 'Communications Plan';
+  if (has('evacuation plan')) return 'Evacuation Plan';
+  if (has('annex')) return 'Annex';
+  if (
+    has(
+      'after action',
+      'aar',
+      'training',
+      'certificate',
+      'mou',
+      'mutual aid',
+      'budget',
+      'invoice',
+      'grant'
+    )
+  ) {
+    return null;
+  }
+  if (stdIds.some((id) => id.startsWith('4.4.'))) return 'COOP';
+  if (stdIds.some((id) => id.startsWith('4.2.'))) return 'Hazard Mitigation Plan';
+  if (stdIds.some((id) => id.startsWith('4.8.'))) return 'Communications Plan';
+  if (stdIds.some((id) => id.startsWith('4.5.')) && has('plan')) return 'EOP';
+  return null;
+}
+function ensurePlanCollaborationDefaults(plan) {
+  return {
+    ...plan,
+    collaborators: Array.isArray(plan?.collaborators) ? plan.collaborators : [],
+    collabRequests: Array.isArray(plan?.collabRequests) ? plan.collabRequests : [],
+    collabHistory: Array.isArray(plan?.collabHistory) ? plan.collabHistory : [],
+  };
+}
+function planAllowsCollaboration(plan) {
+  return ['draft', 'review-due'].includes(plan?.status);
+}
+const COOP_REQUIRED_COURSES_BY_POSITION = {
+  'Emergency Operations Center Director': ['ICS-300', 'ICS-400', 'IS-700', 'IS-800'],
+  'Emergency Operations Center Coordinator': ['ICS-300', 'IS-700', 'IS-800'],
+  'Incident Commander': ['ICS-300', 'ICS-400', 'IS-700', 'IS-800'],
+  'Operations Section Chief': ['ICS-300', 'ICS-400', 'IS-700', 'IS-800'],
+  'Planning Section Chief': ['ICS-300', 'ICS-400', 'IS-700', 'IS-800'],
+  'Logistics Section Chief': ['ICS-300', 'ICS-400', 'IS-700', 'IS-800'],
+  'Finance/Admin Section Chief': ['ICS-300', 'ICS-400', 'IS-700', 'IS-800'],
+  'Safety Officer': ['ICS-300', 'IS-700'],
+  'Public Information Officer': ['ICS-100', 'ICS-200', 'IS-700', 'IS-800'],
+  'Liaison Officer': ['ICS-300', 'IS-700'],
+};
+const CREDENTIAL_TYPE_ALIASES = {
+  'is 700': 'is 700 nims',
+  'is 800': 'is 800 nrf',
+  'is700': 'is 700 nims',
+  'is800': 'is 800 nrf',
+};
+const COOP_POSITION_KEYS = Object.keys(COOP_REQUIRED_COURSES_BY_POSITION);
+function normalizeTrainingTypeName(type) {
+  const normalized = String(type || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return CREDENTIAL_TYPE_ALIASES[normalized] || normalized;
+}
+function collectEmployeeTrainingCoverage(employeeName, records = []) {
+  const key = String(employeeName || '').trim().toLowerCase();
+  const set = new Set();
+  (records || []).forEach((r) => {
+    if (String(r.person || '').trim().toLowerCase() === key) {
+      set.add(normalizeTrainingTypeName(r.type));
+    }
+  });
+  return set;
+}
+function inferCoopRoleFromEmployee(emp) {
+  const combined = `${emp?.title || ''} ${emp?.department || ''}`.toLowerCase();
+  for (const role of COOP_POSITION_KEYS) {
+    const words = role.toLowerCase().split(/\s+/);
+    if (words.some((w) => combined.includes(w))) return role;
+  }
+  return '';
+}
+function getEffectivePlanReviewCycleMonths(plan) {
+  const raw = parseInt(plan?.reviewCycleMonths, 10);
+  if (Number.isFinite(raw) && raw >= 1) return raw;
+  return 12;
+}
+function computePlanReviewDueStatus(plan) {
+  const cycleMonths = getEffectivePlanReviewCycleMonths(plan);
+  const baseDate = plan?.lastReview || plan?.approvalDate || plan?.signoffDate || '';
+  if (!baseDate) {
+    return {
+      hasDates: false,
+      dueDate: '',
+      daysToDue: null,
+      status: 'unknown',
+      cycleMonths,
+    };
+  }
+  const d = new Date(`${baseDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) {
+    return {
+      hasDates: false,
+      dueDate: '',
+      daysToDue: null,
+      status: 'unknown',
+      cycleMonths,
+    };
+  }
+  d.setMonth(d.getMonth() + cycleMonths);
+  const dueDate = d.toISOString().slice(0, 10);
+  const daysToDue = daysUntil(dueDate);
+  const status =
+    daysToDue === null
+      ? 'unknown'
+      : daysToDue < 0
+      ? 'overdue'
+      : daysToDue <= 30
+      ? 'due_soon'
+      : 'ok';
+  return { hasDates: true, dueDate, daysToDue, status, cycleMonths };
+}
+function getCoopReadiness(coop) {
+  if (!coop) return 0;
+  const buckets = [
+    (coop.essentialFunctions || []).length > 0,
+    (coop.successionRoles || []).length > 0,
+    (coop.devolutionTriggers || []).length > 0,
+    !!(coop.alternateFacility?.address || '').trim(),
+    !!coop.lastCoopExerciseDate,
+  ];
+  const done = buckets.filter(Boolean).length;
+  return Math.round((done / buckets.length) * 100);
+}
+function formatDaysUntilLabel(daysToDue) {
+  if (daysToDue === null) return '';
+  if (daysToDue < 0) return `${Math.abs(daysToDue)} day${Math.abs(daysToDue) === 1 ? '' : 's'} overdue`;
+  if (daysToDue === 0) return 'Due today';
+  return `Due in ${daysToDue} day${daysToDue === 1 ? '' : 's'}`;
+}
+function listMissingPlanGovernanceItems(plan) {
+  const missing = [];
+  if (!String(plan.approvedBy || '').trim()) missing.push('approving authority');
+  if (!(plan.approvalDate || plan.signoffDate)) missing.push('approval date');
+  if (!String(plan.approvalSignature || '').trim()) missing.push('approval signature');
+  if (!plan.lastReview) missing.push('last reviewed date');
+  if (!plan.lastReviewEvidence) missing.push('review evidence note');
+  const cycle = parseInt(plan.reviewCycleMonths, 10);
+  if (!Number.isFinite(cycle) || cycle < 1) missing.push('review cycle');
+  return missing;
+}
+function normalizeCoopData(raw = {}) {
+  return {
+    essentialFunctions: Array.isArray(raw.essentialFunctions) ? raw.essentialFunctions : [],
+    successionRoles: Array.isArray(raw.successionRoles) ? raw.successionRoles : [],
+    devolutionTriggers: Array.isArray(raw.devolutionTriggers) ? raw.devolutionTriggers : [],
+    devolutionActivationAuthority: raw.devolutionActivationAuthority || '',
+    devolutionRelocationSite: raw.devolutionRelocationSite || '',
+    devolutionProcedures: raw.devolutionProcedures || '',
+    alternateFacility: {
+      address: raw.alternateFacility?.address || '',
+      capacity: raw.alternateFacility?.capacity || '',
+      technology: raw.alternateFacility?.technology || '',
+      activationContact: raw.alternateFacility?.activationContact || '',
+      testedStatus: raw.alternateFacility?.testedStatus || 'untested',
+      lastTestDate: raw.alternateFacility?.lastTestDate || '',
+    },
+    lastCoopExerciseDate: raw.lastCoopExerciseDate || '',
+    coopExerciseRef: raw.coopExerciseRef || '',
+  };
+}
+function ensurePlanAccreditationDefaults(plan) {
+  const base = ensurePlanCollaborationDefaults(plan);
+  return {
+    ...base,
+    approvedBy: base.approvedBy || '',
+    approvalSignature: base.approvalSignature || '',
+    approvalDate: base.approvalDate || base.signoffDate || '',
+    reviewCycleMonths:
+      Number.isFinite(parseInt(base.reviewCycleMonths, 10)) &&
+      parseInt(base.reviewCycleMonths, 10) >= 1
+        ? parseInt(base.reviewCycleMonths, 10)
+        : 12,
+    lastReviewEvidence: base.lastReviewEvidence || '',
+    reviewHistory: Array.isArray(base.reviewHistory) ? base.reviewHistory : [],
+    coopData: normalizeCoopData(base.coopData),
+  };
 }
 const timeAgo = (ts) => {
   if (!ts) return null;
@@ -1691,17 +1916,36 @@ function buildNotifications(data) {
         module: 'partners',
       });
   });
-  data.plans.forEach((p) => {
-    if (!p.nextReview) return;
-    const d = daysUntil(p.nextReview);
-    if (d !== null && d < 60)
+  (data.plans || []).forEach((rawPlan) => {
+    const p = ensurePlanAccreditationDefaults(rawPlan);
+    const reviewDue = computePlanReviewDueStatus(p);
+    if (reviewDue.hasDates && reviewDue.daysToDue !== null && reviewDue.daysToDue < 60) {
       n.push({
-        id: 'plan-' + p.id,
-        urgency: d < 0 ? 'overdue' : d < 30 ? 'urgent' : 'soon',
-        title: d < 0 ? `Review overdue: ${p.name}` : `Review due: ${p.name}`,
-        detail: d < 0 ? 'Review is overdue' : `Due in ${d} days`,
+        id: 'plan-review-cycle-' + p.id,
+        urgency:
+          reviewDue.daysToDue < 0
+            ? 'overdue'
+            : reviewDue.daysToDue < 30
+            ? 'urgent'
+            : 'soon',
+        title:
+          reviewDue.daysToDue < 0
+            ? `Review cycle overdue: ${p.name}`
+            : `Review cycle due: ${p.name}`,
+        detail: formatDaysUntilLabel(reviewDue.daysToDue),
         module: 'plans',
       });
+    }
+    const governanceMissing = listMissingPlanGovernanceItems(p);
+    if (governanceMissing.length > 0) {
+      n.push({
+        id: 'plan-governance-' + p.id,
+        urgency: governanceMissing.length >= 3 ? 'urgent' : 'soon',
+        title: `Plan governance incomplete: ${p.name}`,
+        detail: `Missing: ${governanceMissing.slice(0, 3).join(', ')}`,
+        module: 'plans',
+      });
+    }
   });
   const lastEx = data.exercises
     .filter((e) => e.date)
@@ -4269,6 +4513,7 @@ const HSEEP_TYPES = [
   'Seminar',
   'Workshop',
   'Tabletop Exercise (TTX)',
+  'COOP Exercise',
   'Game',
   'Drill',
   'Functional Exercise (FE)',
@@ -4354,7 +4599,7 @@ const US_STATES = [
   'Wyoming',
 ];
 
-function ExerciseDetail({ ex, onUpdate, onClose, isIncident }) {
+function ExerciseDetail({ ex, onUpdate, onClose, isIncident, coopPlans = [] }) {
   const [tab, setTab] = useState('overview');
   const [aarDraftLoading, setAarDraftLoading] = useState(false);
   const [aarFinalLoading, setAarFinalLoading] = useState(false);
@@ -4362,7 +4607,21 @@ function ExerciseDetail({ ex, onUpdate, onClose, isIncident }) {
   const [strengthText, setStrengthText] = useState('');
   const [afiText, setAfiText] = useState('');
 
-  const u = (field, val) => onUpdate({ ...ex, [field]: val });
+  const u = (field, val) => {
+    if (field === 'status') {
+      const next = { ...ex, [field]: val };
+      if (
+        !isIncident &&
+        val === 'completed' &&
+        String(ex.type || '').toLowerCase().includes('coop')
+      ) {
+        next.coopEvidenceGeneratedAt = next.coopEvidenceGeneratedAt || Date.now();
+      }
+      onUpdate(next);
+      return;
+    }
+    onUpdate({ ...ex, [field]: val });
+  };
 
   const genAARDraft = async () => {
     setAarDraftLoading(true);
@@ -4644,6 +4903,22 @@ function ExerciseDetail({ ex, onUpdate, onClose, isIncident }) {
                     ))}
                   </FSel>
                 </div>
+                {!isIncident && (
+                  <div>
+                    <Label>Link to COOP plan</Label>
+                    <FSel
+                      value={ex.linkedCoopPlanId || ''}
+                      onChange={(v) => u('linkedCoopPlanId', v)}
+                    >
+                      <option value="">Not linked</option>
+                      {coopPlans.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </FSel>
+                  </div>
+                )}
               </div>
               <div style={{ marginBottom: 14 }}>
                 <Label>
@@ -5369,10 +5644,32 @@ function ExerciseManager({ data, setData }) {
     setSelectedIncId(inc.id);
   };
   const updateEx = (id, updates) =>
-    setData((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((e) => (e.id === id ? updates : e)),
-    }));
+    setData((prev) => {
+      const linkedCoopPlanId = updates?.linkedCoopPlanId || '';
+      const exerciseCompleted =
+        updates?.status === 'completed' ||
+        updates?.status === 'aar_draft' ||
+        updates?.status === 'aar_final' ||
+        updates?.status === 'closed';
+      return {
+        ...prev,
+        exercises: prev.exercises.map((e) => (e.id === id ? updates : e)),
+        plans: (prev.plans || []).map((plan) => {
+          const normalized = ensurePlanAccreditationDefaults(plan);
+          if (normalized.id !== linkedCoopPlanId || normalized.type !== 'COOP' || !exerciseCompleted) {
+            return normalized;
+          }
+          return {
+            ...normalized,
+            coopData: {
+              ...normalizeCoopData(normalized.coopData),
+              lastCoopExerciseDate: updates?.date || today(),
+              coopExerciseRef: updates?.name || updates?.id || '',
+            },
+          };
+        }),
+      };
+    });
   const updateInc = (id, updates) =>
     setData((prev) => ({
       ...prev,
@@ -6330,6 +6627,20 @@ function EmployeeDetail({ emp, onUpdate, onClose, data }) {
                     <option value="contractor">Contractor</option>
                     <option value="intern">Intern</option>
                     <option value="dsw">Disaster Service Worker (DSW)</option>
+                  </FSel>
+                </div>
+                <div>
+                  <Label>COOP Continuity Role</Label>
+                  <FSel
+                    value={emp.coopRole || ''}
+                    onChange={(v) => u('coopRole', v)}
+                  >
+                    <option value="">Unassigned</option>
+                    {COOP_POSITION_KEYS.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
                   </FSel>
                 </div>
               </div>
@@ -7932,6 +8243,52 @@ function TrainingManager({ data, setData }) {
       t.person.toLowerCase().includes(search.toLowerCase()) ||
       t.type.toLowerCase().includes(search.toLowerCase())
   );
+  const employeeByName = useMemo(() => {
+    const map = new Map();
+    (data.employees || []).forEach((emp) => {
+      const key = String(emp.name || '').trim().toLowerCase();
+      if (key) map.set(key, emp);
+    });
+    return map;
+  }, [data.employees]);
+  const requirementsMatrix = useMemo(() => {
+    const rows = [];
+    COOP_POSITION_KEYS.forEach((role) => {
+      const personnel = (data.employees || []).filter((emp) => {
+        const assignedRole = emp.coopRole || inferCoopRoleFromEmployee(emp);
+        return assignedRole === role;
+      });
+      const requiredCourses = COOP_REQUIRED_COURSES_BY_POSITION[role] || [];
+      const cells = requiredCourses.map((course) => {
+        const normalizedCourse = normalizeTrainingTypeName(course);
+        const qualified = personnel.filter((emp) => {
+          const byTraining = collectEmployeeTrainingCoverage(emp.name, data.training).has(
+            normalizedCourse
+          );
+          const byCredential = (emp.credentials || []).some(
+            (c) => normalizeTrainingTypeName(c.type || c.name) === normalizedCourse
+          );
+          return byTraining || byCredential;
+        });
+        return {
+          course,
+          met: qualified.length > 0,
+          qualifiedNames: qualified.map((q) => q.name).filter(Boolean),
+        };
+      });
+      rows.push({
+        role,
+        personnel,
+        requiredCourses,
+        cells,
+        metCount: cells.filter((c) => c.met).length,
+      });
+    });
+    return rows;
+  }, [data.employees, data.training]);
+  const matrixFullyCompliant = requirementsMatrix.every(
+    (r) => r.requiredCourses.length > 0 && r.metCount === r.requiredCourses.length
+  );
   return (
     <div style={{ padding: '28px clamp(24px,3vw,48px)', maxWidth: 980 }}>
       <div
@@ -7993,6 +8350,94 @@ function TrainingManager({ data, setData }) {
         loading={aiLoading}
         label="Training Needs Assessment"
       />
+      <div
+        style={{
+          marginBottom: 14,
+          border: `1px solid ${matrixFullyCompliant ? B.greenBorder : B.amberBorder}`,
+          background: matrixFullyCompliant ? B.greenLight : B.amberLight,
+          borderRadius: 10,
+          padding: '12px 14px',
+        }}
+      >
+        <div style={{ fontSize: 12, fontWeight: 700, color: B.text, marginBottom: 6 }}>
+          Position-to-requirement matrix (COOP / mission continuity)
+        </div>
+        <div style={{ fontSize: 11, color: B.faint, marginBottom: 10, lineHeight: 1.5 }}>
+          This matrix ties Personnel roles to required coursework and marks each role green/red
+          based on completed training evidence.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {requirementsMatrix.map((row) => {
+            const roleCompliant =
+              row.requiredCourses.length > 0 && row.metCount === row.requiredCourses.length;
+            return (
+              <div
+                key={row.role}
+                style={{
+                  border: `1px solid ${roleCompliant ? B.greenBorder : B.amberBorder}`,
+                  background: '#fff',
+                  borderRadius: 8,
+                  padding: '9px 10px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 6,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: B.text }}>
+                      {row.role}
+                    </div>
+                    <div style={{ fontSize: 10, color: B.faint }}>
+                      Assigned personnel:{' '}
+                      {row.personnel.length > 0
+                        ? row.personnel.map((p) => p.name).join(', ')
+                        : 'None assigned'}
+                    </div>
+                  </div>
+                  <Tag
+                    label={roleCompliant ? 'Compliant' : `${row.metCount}/${row.requiredCourses.length} complete`}
+                    color={roleCompliant ? B.green : B.amber}
+                    bg={roleCompliant ? B.greenLight : B.amberLight}
+                    border={roleCompliant ? B.greenBorder : B.amberBorder}
+                  />
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, minmax(110px, 1fr))',
+                    gap: 6,
+                  }}
+                >
+                  {row.cells.map((cell) => (
+                    <div
+                      key={cell.course}
+                      style={{
+                        border: `1px solid ${cell.met ? B.greenBorder : B.redBorder}`,
+                        background: cell.met ? B.greenLight : B.redLight,
+                        borderRadius: 6,
+                        padding: '6px 7px',
+                      }}
+                    >
+                      <div style={{ fontSize: 10, fontWeight: 700, color: B.text }}>{cell.course}</div>
+                      <div style={{ fontSize: 10, color: cell.met ? B.green : B.red, marginTop: 2 }}>
+                        {cell.met
+                          ? `Met${cell.qualifiedNames.length ? `: ${cell.qualifiedNames.join(', ')}` : ''}`
+                          : 'Missing'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
       {showForm && (
         <div
           style={{
@@ -8486,6 +8931,204 @@ function PartnerRegistry({ data, setData }) {
 function PlanLibrary({ data, setData }) {
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const currentUser = useMemo(() => getCurrentUserIdentity(), []);
+  const [inviteDrafts, setInviteDrafts] = useState({});
+  const [requestDrafts, setRequestDrafts] = useState({});
+  const plans = useMemo(
+    () => (data.plans || []).map((p) => ensurePlanAccreditationDefaults(p)),
+    [data.plans]
+  );
+  const mutatePlan = useCallback(
+    (planId, mutate) => {
+      setData((prev) => ({
+        ...prev,
+        plans: (prev.plans || []).map((p) => {
+          const base = ensurePlanAccreditationDefaults(p);
+          return base.id === planId ? mutate(base) : base;
+        }),
+      }));
+    },
+    [setData]
+  );
+  const getInviteDraft = useCallback(
+    (planId) =>
+      inviteDrafts[planId] || {
+        name: '',
+        email: '',
+        permission: 'comment_only',
+      },
+    [inviteDrafts]
+  );
+  const setInviteField = useCallback((planId, field, value) => {
+    setInviteDrafts((prev) => ({
+      ...prev,
+      [planId]: { ...(prev[planId] || {}), [field]: value },
+    }));
+  }, []);
+  const getRequestDraft = useCallback(
+    (planId, plan) =>
+      requestDrafts[planId] || {
+        collaboratorId: (plan?.collaborators || [])[0]?.id || '',
+        kind: 'comment',
+        section: '',
+        summary: '',
+        proposedText: '',
+      },
+    [requestDrafts]
+  );
+  const setRequestField = useCallback((planId, field, value) => {
+    setRequestDrafts((prev) => ({
+      ...prev,
+      [planId]: { ...(prev[planId] || {}), [field]: value },
+    }));
+  }, []);
+  const buildInviteCode = () =>
+    uid()
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(-8)
+      .toUpperCase();
+  const [coopDrafts, setCoopDrafts] = useState({});
+  const getCoopDraft = useCallback(
+    (planId) =>
+      coopDrafts[planId] || {
+        essentialFunction: { functionName: '', owner: '', rtoHours: '', notes: '' },
+        successionRole: {
+          role: '',
+          primaryEmployeeId: '',
+          successor1EmployeeId: '',
+          successor2EmployeeId: '',
+          delegationDoc: '',
+        },
+        devolutionTrigger: { trigger: '', authority: '', relocationSite: '', procedure: '' },
+      },
+    [coopDrafts]
+  );
+  const setCoopDraftField = useCallback((planId, area, field, value) => {
+    setCoopDrafts((prev) => ({
+      ...prev,
+      [planId]: {
+        ...(prev[planId] || {}),
+        [area]: { ...((prev[planId] || {})[area] || {}), [field]: value },
+      },
+    }));
+  }, []);
+  const updateCoopData = useCallback(
+    (planId, mutate) => {
+      mutatePlan(planId, (target) => {
+        const coop = normalizeCoopData(target.coopData);
+        return { ...target, coopData: mutate(coop) };
+      });
+    },
+    [mutatePlan]
+  );
+  const addCoopEssentialFunction = (plan) => {
+    const draft = getCoopDraft(plan.id).essentialFunction;
+    if (!String(draft.functionName || '').trim()) return;
+    updateCoopData(plan.id, (coop) => ({
+      ...coop,
+      essentialFunctions: [
+        ...(coop.essentialFunctions || []),
+        {
+          id: uid(),
+          functionName: String(draft.functionName || '').trim(),
+          owner: String(draft.owner || '').trim(),
+          rtoHours: String(draft.rtoHours || '').trim(),
+          notes: String(draft.notes || '').trim(),
+        },
+      ],
+    }));
+    setCoopDraftField(plan.id, 'essentialFunction', 'functionName', '');
+    setCoopDraftField(plan.id, 'essentialFunction', 'owner', '');
+    setCoopDraftField(plan.id, 'essentialFunction', 'rtoHours', '');
+    setCoopDraftField(plan.id, 'essentialFunction', 'notes', '');
+  };
+  const addCoopSuccessionRole = (plan) => {
+    const draft = getCoopDraft(plan.id).successionRole;
+    if (!String(draft.role || '').trim()) return;
+    updateCoopData(plan.id, (coop) => ({
+      ...coop,
+      successionRoles: [
+        ...(coop.successionRoles || []),
+        {
+          id: uid(),
+          role: String(draft.role || '').trim(),
+          primaryEmployeeId: draft.primaryEmployeeId || '',
+          successor1EmployeeId: draft.successor1EmployeeId || '',
+          successor2EmployeeId: draft.successor2EmployeeId || '',
+          delegationDoc: String(draft.delegationDoc || '').trim(),
+        },
+      ],
+    }));
+    setCoopDraftField(plan.id, 'successionRole', 'role', '');
+    setCoopDraftField(plan.id, 'successionRole', 'primaryEmployeeId', '');
+    setCoopDraftField(plan.id, 'successionRole', 'successor1EmployeeId', '');
+    setCoopDraftField(plan.id, 'successionRole', 'successor2EmployeeId', '');
+    setCoopDraftField(plan.id, 'successionRole', 'delegationDoc', '');
+  };
+  const addCoopDevolutionTrigger = (plan) => {
+    const draft = getCoopDraft(plan.id).devolutionTrigger;
+    if (!String(draft.trigger || '').trim()) return;
+    updateCoopData(plan.id, (coop) => ({
+      ...coop,
+      devolutionTriggers: [
+        ...(coop.devolutionTriggers || []),
+        {
+          id: uid(),
+          trigger: String(draft.trigger || '').trim(),
+          authority: String(draft.authority || '').trim(),
+          relocationSite: String(draft.relocationSite || '').trim(),
+          procedure: String(draft.procedure || '').trim(),
+        },
+      ],
+    }));
+    setCoopDraftField(plan.id, 'devolutionTrigger', 'trigger', '');
+    setCoopDraftField(plan.id, 'devolutionTrigger', 'authority', '');
+    setCoopDraftField(plan.id, 'devolutionTrigger', 'relocationSite', '');
+    setCoopDraftField(plan.id, 'devolutionTrigger', 'procedure', '');
+  };
+  const updateCoopArrayItem = (plan, key, id, field, value) => {
+    updateCoopData(plan.id, (coop) => ({
+      ...coop,
+      [key]: (coop[key] || []).map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      ),
+    }));
+  };
+  const removeCoopArrayItem = (plan, key, id) => {
+    updateCoopData(plan.id, (coop) => ({
+      ...coop,
+      [key]: (coop[key] || []).filter((item) => item.id !== id),
+    }));
+  };
+  const recordPlanReviewEvidence = (plan) => {
+    const governanceMissing = listMissingPlanGovernanceItems(plan).filter(
+      (m) => m !== 'review evidence note'
+    );
+    if (governanceMissing.length > 0) {
+      window.alert(
+        'Complete governance items before recording a review:\n- ' +
+          governanceMissing.join('\n- ')
+      );
+      return;
+    }
+    const reviewDate = today();
+    mutatePlan(plan.id, (target) => {
+      const nextHistory = [
+        {
+          id: uid(),
+          reviewedAt: reviewDate,
+          reviewedBy: target.owner || currentUser.name || currentUser.email || 'Plan author',
+          evidence: target.lastReviewEvidence || 'Review completed and validated in Plan Library.',
+        },
+        ...(target.reviewHistory || []),
+      ].slice(0, 25);
+      return {
+        ...target,
+        lastReview: reviewDate,
+        reviewHistory: nextHistory,
+      };
+    });
+  };
   const updatePlanStatus = useCallback((plan, nextStatus) => {
     if (nextStatus === 'current') {
       const gaps = getPlanSafeguardGaps(plan);
@@ -8496,12 +9139,17 @@ function PlanLibrary({ data, setData }) {
         );
         return;
       }
+      const governanceMissing = listMissingPlanGovernanceItems(plan);
+      if (governanceMissing.length) {
+        window.alert(
+          'Cannot mark this plan as Current yet.\n\nComplete plan governance fields first:\n- ' +
+            governanceMissing.join('\n- ')
+        );
+        return;
+      }
     }
-    setData((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) => (p.id === plan.id ? { ...p, status: nextStatus } : p)),
-    }));
-  }, [getPlanSafeguardGaps, setData]);
+    mutatePlan(plan.id, (target) => ({ ...target, status: nextStatus }));
+  }, [mutatePlan]);
   const [form, setForm] = useState({
     name: '',
     type: 'EOP',
@@ -8522,14 +9170,6 @@ function PlanLibrary({ data, setData }) {
     'Annex',
     'Other',
   ];
-  const EMAP_REFS = {
-    EOP: '4.5',
-    COOP: '4.4',
-    'COG Plan': '4.4',
-    'Hazard Mitigation Plan': '4.2',
-    'Recovery Plan': '4.5',
-    'Communications Plan': '4.8',
-  };
   const STATUS_OPTS = [
     { v: 'current', l: 'Current', c: B.green },
     { v: 'review-due', l: 'Review Due', c: B.amber },
@@ -8542,11 +9182,11 @@ function PlanLibrary({ data, setData }) {
       ...prev,
       plans: [
         ...prev.plans,
-        {
+        ensurePlanAccreditationDefaults({
           ...form,
           id: uid(),
           docs: [],
-          emapRef: EMAP_REFS[form.type] || '4.5',
+          emapRef: PLAN_EMAP_REFS[form.type] || '4.5',
           addedAt: Date.now(),
           requirePartnerSafeguard: planTypeRequiresPartnerSafeguard(form.type),
           partnerReviewDate: '',
@@ -8558,7 +9198,10 @@ function PlanLibrary({ data, setData }) {
           signoffBy: '',
           signoffDate: '',
           signoffConfirmed: false,
-        },
+          collaborators: [],
+          collabRequests: [],
+          collabHistory: [],
+        }),
       ],
     }));
     setForm({
@@ -8573,10 +9216,114 @@ function PlanLibrary({ data, setData }) {
     setShowForm(false);
   };
   const update = (id, f, v) =>
-    setData((prev) => ({
+    mutatePlan(id, (p) => ({ ...p, [f]: v }));
+  const inviteCollaborator = (plan) => {
+    const draft = getInviteDraft(plan.id);
+    const email = String(draft.email || '').trim().toLowerCase();
+    if (!email) return;
+    mutatePlan(plan.id, (target) => {
+      const existing = (target.collaborators || []).find(
+        (c) => String(c.email || '').toLowerCase() === email
+      );
+      const nextCollaborator = existing
+        ? {
+            ...existing,
+            name: draft.name || existing.name || email.split('@')[0],
+            permission: draft.permission || existing.permission || 'comment_only',
+            status: 'active',
+            invitedAt: existing.invitedAt || Date.now(),
+            invitedBy:
+              currentUser.name || currentUser.email || existing.invitedBy || 'Plan Author',
+            inviteCode: existing.inviteCode || buildInviteCode(),
+            accessScope: `plan:${target.id}`,
+          }
+        : {
+            id: uid(),
+            name: draft.name || email.split('@')[0],
+            email,
+            permission: draft.permission || 'comment_only',
+            status: 'active',
+            invitedAt: Date.now(),
+            invitedBy: currentUser.name || currentUser.email || 'Plan Author',
+            inviteCode: buildInviteCode(),
+            accessScope: `plan:${target.id}`,
+          };
+      const collaborators = existing
+        ? target.collaborators.map((c) => (c.id === existing.id ? nextCollaborator : c))
+        : [...(target.collaborators || []), nextCollaborator];
+      return { ...target, collaborators };
+    });
+    setInviteDrafts((prev) => ({
       ...prev,
-      plans: prev.plans.map((p) => (p.id === id ? { ...p, [f]: v } : p)),
+      [plan.id]: { ...getInviteDraft(plan.id), email: '', name: '' },
     }));
+  };
+  const submitCollabRequest = (plan) => {
+    const draft = getRequestDraft(plan.id, plan);
+    const summary = String(draft.summary || '').trim();
+    if (!summary) return;
+    mutatePlan(plan.id, (target) => {
+      const collaborator =
+        (target.collaborators || []).find((c) => c.id === draft.collaboratorId) || null;
+      const requestedKind = draft.kind === 'update' ? 'update' : 'comment';
+      const resolvedKind =
+        requestedKind === 'update' && collaborator?.permission !== 'propose_updates'
+          ? 'comment'
+          : requestedKind;
+      const req = {
+        id: uid(),
+        collaboratorId: collaborator?.id || null,
+        collaboratorName: collaborator?.name || 'Outside collaborator',
+        collaboratorEmail: collaborator?.email || '',
+        submittedBy: collaborator?.name || currentUser.name || 'Outside collaborator',
+        submittedByEmail: collaborator?.email || currentUser.email || '',
+        kind: resolvedKind,
+        section: String(draft.section || '').trim(),
+        summary,
+        proposedText:
+          resolvedKind === 'update' ? String(draft.proposedText || '').trim() : '',
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+      return { ...target, collabRequests: [req, ...(target.collabRequests || [])] };
+    });
+    setRequestDrafts((prev) => ({
+      ...prev,
+      [plan.id]: {
+        ...getRequestDraft(plan.id, plan),
+        summary: '',
+        proposedText: '',
+      },
+    }));
+  };
+  const decideCollabRequest = (plan, requestId, decision) => {
+    mutatePlan(plan.id, (target) => {
+      const existing = (target.collabRequests || []).find((r) => r.id === requestId);
+      if (!existing || existing.status !== 'pending') return target;
+      const resolved = {
+        ...existing,
+        status: decision,
+        decidedAt: Date.now(),
+        decidedBy: currentUser.name || currentUser.email || 'Plan author',
+        decidedByEmail: currentUser.email || '',
+      };
+      const shouldAppendNote =
+        decision === 'approved' &&
+        resolved.kind === 'update' &&
+        String(resolved.proposedText || '').trim();
+      const noteLine = shouldAppendNote
+        ? `${today()} approved collaborator update (${resolved.section || 'General'}): ${resolved.proposedText}`
+        : '';
+      return {
+        ...target,
+        notes: noteLine ? `${target.notes ? `${target.notes}\n` : ''}${noteLine}` : target.notes,
+        collabRequests: target.collabRequests.map((r) =>
+          r.id === requestId ? resolved : r
+        ),
+        collabHistory: [resolved, ...(target.collabHistory || [])].slice(0, 100),
+      };
+    });
+  };
   const remove = (id) =>
     setData((prev) => ({
       ...prev,
@@ -8604,8 +9351,8 @@ function PlanLibrary({ data, setData }) {
             Plan Library
           </h1>
           <p style={{ color: B.faint, fontSize: 13, marginTop: 2 }}>
-            EMAP 4.4, 4.5, 4.8 - {data.plans.length} plans -{' '}
-            {data.plans.filter((p) => p.status === 'current').length} current
+            EMAP 4.4, 4.5, 4.8 - {plans.length} plans -{' '}
+            {plans.filter((p) => p.status === 'current').length} current
           </p>
         </div>
         <CoachBanner moduleId="plans" />
@@ -8719,13 +9466,13 @@ function PlanLibrary({ data, setData }) {
           </div>
         </div>
       )}
-      {data.plans.length === 0 ? (
+      {plans.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: '32px', color: B.faint }}>
           No plans yet
         </Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {data.plans.map((plan) => {
+          {plans.map((plan) => {
             const sc =
               STATUS_OPTS.find((s) => s.v === plan.status) || STATUS_OPTS[0];
             const rd = daysUntil(plan.nextReview);
@@ -8743,6 +9490,16 @@ function PlanLibrary({ data, setData }) {
             const safeguardReady = safeguardGaps.length === 0;
             const safeguardRequired =
               plan.requirePartnerSafeguard ?? planTypeRequiresPartnerSafeguard(plan.type);
+            const reviewInfo = computePlanReviewDueStatus(plan);
+            const governanceMissing = listMissingPlanGovernanceItems(plan);
+            const governanceReady = governanceMissing.length === 0;
+            const coopData = normalizeCoopData(plan.coopData);
+            const coopReadiness = getCoopReadiness(coopData);
+            const isCoopPlan = plan.type === 'COOP';
+            const collabOpen = planAllowsCollaboration(plan);
+            const pendingRequests = (plan.collabRequests || []).filter(
+              (r) => r.status === 'pending'
+            ).length;
             return (
               <div
                 key={plan.id}
@@ -8857,6 +9614,17 @@ function PlanLibrary({ data, setData }) {
                         <span>
                           📎 {plan.docs.length} file
                           {plan.docs.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {(plan.collaborators || []).length > 0 && (
+                        <span>
+                          🤝 {(plan.collaborators || []).filter((c) => c.status === 'active').length} collaborator
+                          {(plan.collaborators || []).filter((c) => c.status === 'active').length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {pendingRequests > 0 && (
+                        <span style={{ color: B.amber, fontWeight: 700 }}>
+                          {pendingRequests} pending collaborator {pendingRequests === 1 ? 'request' : 'requests'}
                         </span>
                       )}
                     </div>
@@ -8974,6 +9742,99 @@ function PlanLibrary({ data, setData }) {
                         placeholder="Plan scope, key contacts, last major update summary..."
                       />
                     </div>
+                    <div
+                      style={{
+                        marginBottom: 10,
+                        border: `1px solid ${governanceReady ? B.greenBorder : B.amberBorder}`,
+                        background: governanceReady ? B.greenLight : B.amberLight,
+                        borderRadius: 8,
+                        padding: '12px 12px',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700, color: B.text, marginBottom: 6 }}>
+                        Approval / review governance
+                      </div>
+                      <div style={{ fontSize: 11, color: B.faint, marginBottom: 8, lineHeight: 1.45 }}>
+                        Track approving authority, signature, review cycle, and review evidence to satisfy assessors.
+                      </div>
+                      {!governanceReady && (
+                        <div style={{ fontSize: 11, color: B.amber, marginBottom: 8, fontWeight: 600 }}>
+                          Missing: {governanceMissing.join(', ')}
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr 1fr',
+                          gap: 10,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <div>
+                          <Label>Approving authority</Label>
+                          <FInput
+                            value={plan.approvedBy || ''}
+                            onChange={(v) => update(plan.id, 'approvedBy', v)}
+                            placeholder="EM Director / policy authority"
+                          />
+                        </div>
+                        <div>
+                          <Label>Approval date</Label>
+                          <FInput
+                            type="date"
+                            value={plan.signoffDate || ''}
+                            onChange={(v) => {
+                              update(plan.id, 'signoffDate', v);
+                              update(plan.id, 'approvalDate', v);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label>Review cycle (months)</Label>
+                          <FInput
+                            type="number"
+                            value={plan.reviewCycleMonths || 12}
+                            onChange={(v) => update(plan.id, 'reviewCycleMonths', v)}
+                            placeholder="12"
+                          />
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <Label>Approval signature / attestation</Label>
+                        <FInput
+                          value={plan.approvalSignature || ''}
+                          onChange={(v) => update(plan.id, 'approvalSignature', v)}
+                          placeholder="Type signer name or signature attestation"
+                        />
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <Label>Review evidence note</Label>
+                        <FTextarea
+                          rows={2}
+                          value={plan.lastReviewEvidence || ''}
+                          onChange={(v) => update(plan.id, 'lastReviewEvidence', v)}
+                          placeholder="Describe what was reviewed, by whom, and supporting evidence artifacts."
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+                        <Btn
+                          label="Record Review Evidence"
+                          onClick={() => recordPlanReviewEvidence(plan)}
+                          small
+                          primary
+                        />
+                        <span style={{ fontSize: 11, color: reviewInfo.status === 'overdue' ? B.red : reviewInfo.status === 'due_soon' ? B.amber : B.faint }}>
+                          {reviewInfo.hasDates
+                            ? `Review cycle: ${formatDaysUntilLabel(reviewInfo.daysToDue)} (next ${fmtDate(reviewInfo.dueDate)})`
+                            : 'Set review cycle + reviewed date to auto-track due status'}
+                        </span>
+                      </div>
+                      {(plan.reviewHistory || []).length > 0 && (
+                        <div style={{ fontSize: 10, color: B.faint, marginTop: 4 }}>
+                          Latest review evidence: {(plan.reviewHistory || [])[0]?.reviewedAt || ''} by {(plan.reviewHistory || [])[0]?.reviewedBy || 'N/A'}
+                        </div>
+                      )}
+                    </div>
                     {safeguardRequired && (
                       <div
                         style={{
@@ -9083,6 +9944,439 @@ function PlanLibrary({ data, setData }) {
                         </div>
                       </div>
                     )}
+                    {isCoopPlan && (
+                      <div
+                        style={{
+                          marginBottom: 10,
+                          border: `1px solid ${coopReadiness >= 80 ? B.greenBorder : coopReadiness >= 50 ? B.amberBorder : B.redBorder}`,
+                          background: coopReadiness >= 80 ? B.greenLight : coopReadiness >= 50 ? B.amberLight : B.redLight,
+                          borderRadius: 8,
+                          padding: '12px 12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: B.text }}>
+                            COOP continuity controls
+                          </div>
+                          <Tag
+                            label={`Readiness ${coopReadiness}%`}
+                            color={coopReadiness >= 80 ? B.green : coopReadiness >= 50 ? B.amber : B.red}
+                            bg="#fff"
+                            border={coopReadiness >= 80 ? B.greenBorder : coopReadiness >= 50 ? B.amberBorder : B.redBorder}
+                          />
+                        </div>
+                        <div style={{ fontSize: 11, color: B.faint, marginBottom: 8, lineHeight: 1.45 }}>
+                          Build the operational continuity record in structured form so it is usable during disruptions and review-ready for EMAP.
+                        </div>
+
+                        <div style={{ border: `1px solid ${B.border}`, borderRadius: 7, background: '#fff', padding: '10px 10px', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: B.text, marginBottom: 8 }}>
+                            Essential functions register (with RTOs)
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 120px auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
+                            <div>
+                              <Label>Essential function</Label>
+                              <FInput
+                                value={getCoopDraft(plan.id).essentialFunction.functionName || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'essentialFunction', 'functionName', v)}
+                                placeholder="Emergency warning/public information"
+                              />
+                            </div>
+                            <div>
+                              <Label>Owner</Label>
+                              <FInput
+                                value={getCoopDraft(plan.id).essentialFunction.owner || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'essentialFunction', 'owner', v)}
+                                placeholder="PIO"
+                              />
+                            </div>
+                            <div>
+                              <Label>RTO (hrs)</Label>
+                              <FInput
+                                type="number"
+                                value={getCoopDraft(plan.id).essentialFunction.rtoHours || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'essentialFunction', 'rtoHours', v)}
+                                placeholder="4"
+                              />
+                            </div>
+                            <Btn label="Add" onClick={() => addCoopEssentialFunction(plan)} small primary />
+                          </div>
+                          {(coopData.essentialFunctions || []).length === 0 ? (
+                            <div style={{ fontSize: 11, color: B.faint }}>No essential functions recorded yet.</div>
+                          ) : (
+                            (coopData.essentialFunctions || []).map((item) => (
+                              <div
+                                key={item.id}
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '1.4fr 1fr 110px auto',
+                                  gap: 8,
+                                  alignItems: 'center',
+                                  border: `1px solid ${B.border}`,
+                                  borderRadius: 6,
+                                  padding: '6px 7px',
+                                  marginBottom: 6,
+                                  background: '#fafcfc',
+                                }}
+                              >
+                                <FInput
+                                  value={item.functionName || ''}
+                                  onChange={(v) => updateCoopArrayItem(plan, 'essentialFunctions', item.id, 'functionName', v)}
+                                  placeholder="Function"
+                                />
+                                <FInput
+                                  value={item.owner || ''}
+                                  onChange={(v) => updateCoopArrayItem(plan, 'essentialFunctions', item.id, 'owner', v)}
+                                  placeholder="Owner"
+                                />
+                                <FInput
+                                  type="number"
+                                  value={item.rtoHours || ''}
+                                  onChange={(v) => updateCoopArrayItem(plan, 'essentialFunctions', item.id, 'rtoHours', v)}
+                                  placeholder="RTO"
+                                />
+                                <button
+                                  onClick={() => removeCoopArrayItem(plan, 'essentialFunctions', item.id)}
+                                  style={{
+                                    border: `1px solid ${B.border}`,
+                                    borderRadius: 6,
+                                    background: '#fff',
+                                    color: B.text,
+                                    fontSize: 11,
+                                    padding: '6px 8px',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div style={{ border: `1px solid ${B.border}`, borderRadius: 7, background: '#fff', padding: '10px 10px', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: B.text, marginBottom: 8 }}>
+                            Succession chain validation (3 deep)
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
+                            <div>
+                              <Label>Role</Label>
+                              <FSel
+                                value={getCoopDraft(plan.id).successionRole.role || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'successionRole', 'role', v)}
+                              >
+                                <option value="">Select role...</option>
+                                {COOP_POSITION_KEYS.map((role) => (
+                                  <option key={role} value={role}>
+                                    {role}
+                                  </option>
+                                ))}
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Primary</Label>
+                              <FSel
+                                value={getCoopDraft(plan.id).successionRole.primaryEmployeeId || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'successionRole', 'primaryEmployeeId', v)}
+                              >
+                                <option value="">Select...</option>
+                                {(data.employees || []).map((e) => (
+                                  <option key={e.id} value={e.id}>
+                                    {e.name}
+                                  </option>
+                                ))}
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Successor 1</Label>
+                              <FSel
+                                value={getCoopDraft(plan.id).successionRole.successor1EmployeeId || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'successionRole', 'successor1EmployeeId', v)}
+                              >
+                                <option value="">Select...</option>
+                                {(data.employees || []).map((e) => (
+                                  <option key={e.id} value={e.id}>
+                                    {e.name}
+                                  </option>
+                                ))}
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Successor 2</Label>
+                              <FSel
+                                value={getCoopDraft(plan.id).successionRole.successor2EmployeeId || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'successionRole', 'successor2EmployeeId', v)}
+                              >
+                                <option value="">Select...</option>
+                                {(data.employees || []).map((e) => (
+                                  <option key={e.id} value={e.id}>
+                                    {e.name}
+                                  </option>
+                                ))}
+                              </FSel>
+                            </div>
+                            <Btn label="Add" onClick={() => addCoopSuccessionRole(plan)} small primary />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <Label>Delegation of authority reference (for new entry)</Label>
+                            <FInput
+                              value={getCoopDraft(plan.id).successionRole.delegationDoc || ''}
+                              onChange={(v) => setCoopDraftField(plan.id, 'successionRole', 'delegationDoc', v)}
+                              placeholder="Resolution 2026-04 / signed delegation memo"
+                            />
+                          </div>
+                          {(coopData.successionRoles || []).length === 0 ? (
+                            <div style={{ fontSize: 11, color: B.faint }}>No succession roles recorded yet.</div>
+                          ) : (
+                            (coopData.successionRoles || []).map((item) => {
+                              const primary = (data.employees || []).find((e) => e.id === item.primaryEmployeeId);
+                              const succ1 = (data.employees || []).find((e) => e.id === item.successor1EmployeeId);
+                              const succ2 = (data.employees || []).find((e) => e.id === item.successor2EmployeeId);
+                              const successorFilled = [item.primaryEmployeeId, item.successor1EmployeeId, item.successor2EmployeeId].filter(Boolean).length;
+                              const vacancy = successorFilled < 3;
+                              const departed = [primary, succ1, succ2].filter(Boolean).some((e) => String(e.status || 'active').toLowerCase() !== 'active');
+                              return (
+                                <div
+                                  key={item.id}
+                                  style={{
+                                    border: `1px solid ${vacancy || departed ? B.amberBorder : B.greenBorder}`,
+                                    borderRadius: 6,
+                                    padding: '8px 8px',
+                                    marginBottom: 6,
+                                    background: vacancy || departed ? B.amberLight : B.greenLight,
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: B.text }}>
+                                      {item.role}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                      {vacancy && (
+                                        <Tag label="Vacant slot" color={B.amber} bg="#fff" border={B.amberBorder} />
+                                      )}
+                                      {departed && (
+                                        <Tag label="Inactive designee" color={B.red} bg="#fff" border={B.redBorder} />
+                                      )}
+                                      <button
+                                        onClick={() => removeCoopArrayItem(plan, 'successionRoles', item.id)}
+                                        style={{
+                                          border: `1px solid ${B.border}`,
+                                          borderRadius: 6,
+                                          background: '#fff',
+                                          color: B.text,
+                                          fontSize: 11,
+                                          padding: '5px 8px',
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: B.text, marginBottom: 4 }}>
+                                    Primary: {primary?.name || 'Unassigned'} · Successor 1: {succ1?.name || 'Unassigned'} · Successor 2: {succ2?.name || 'Unassigned'}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: B.faint }}>
+                                    Delegation ref: {item.delegationDoc || 'Not provided'}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div style={{ border: `1px solid ${B.border}`, borderRadius: 7, background: '#fff', padding: '10px 10px', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: B.text, marginBottom: 8 }}>
+                            Devolution triggers and procedures
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
+                            <div>
+                              <Label>Trigger condition</Label>
+                              <FInput
+                                value={getCoopDraft(plan.id).devolutionTrigger.trigger || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'devolutionTrigger', 'trigger', v)}
+                                placeholder="Primary facility unusable > 24 hours"
+                              />
+                            </div>
+                            <div>
+                              <Label>Decision authority</Label>
+                              <FInput
+                                value={getCoopDraft(plan.id).devolutionTrigger.authority || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'devolutionTrigger', 'authority', v)}
+                                placeholder="EM Director"
+                              />
+                            </div>
+                            <div>
+                              <Label>Relocation site</Label>
+                              <FInput
+                                value={getCoopDraft(plan.id).devolutionTrigger.relocationSite || ''}
+                                onChange={(v) => setCoopDraftField(plan.id, 'devolutionTrigger', 'relocationSite', v)}
+                                placeholder="Alt EOC - North Campus"
+                              />
+                            </div>
+                            <Btn label="Add" onClick={() => addCoopDevolutionTrigger(plan)} small primary />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <Label>Procedure summary (for new entry)</Label>
+                            <FTextarea
+                              rows={2}
+                              value={getCoopDraft(plan.id).devolutionTrigger.procedure || ''}
+                              onChange={(v) => setCoopDraftField(plan.id, 'devolutionTrigger', 'procedure', v)}
+                              placeholder="Who declares activation, notification order, relocation actions, and first operational priorities."
+                            />
+                          </div>
+                          {(coopData.devolutionTriggers || []).length === 0 ? (
+                            <div style={{ fontSize: 11, color: B.faint }}>No devolution triggers recorded yet.</div>
+                          ) : (
+                            (coopData.devolutionTriggers || []).map((item) => (
+                              <div
+                                key={item.id}
+                                style={{
+                                  border: `1px solid ${B.border}`,
+                                  borderRadius: 6,
+                                  padding: '7px 8px',
+                                  marginBottom: 6,
+                                  background: '#fafcfc',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ fontSize: 11, color: B.text, fontWeight: 700 }}>
+                                    {item.trigger}
+                                  </div>
+                                  <button
+                                    onClick={() => removeCoopArrayItem(plan, 'devolutionTriggers', item.id)}
+                                    style={{
+                                      border: `1px solid ${B.border}`,
+                                      borderRadius: 6,
+                                      background: '#fff',
+                                      color: B.text,
+                                      fontSize: 11,
+                                      padding: '5px 8px',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                                <div style={{ fontSize: 10, color: B.faint, marginTop: 4 }}>
+                                  Authority: {item.authority || 'N/A'} · Site: {item.relocationSite || 'N/A'}
+                                </div>
+                                {item.procedure && (
+                                  <div style={{ fontSize: 10, color: B.text, marginTop: 4 }}>
+                                    {item.procedure}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div style={{ border: `1px solid ${B.border}`, borderRadius: 7, background: '#fff', padding: '10px 10px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: B.text, marginBottom: 8 }}>
+                            Alternate facility record
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                            <div>
+                              <Label>Address</Label>
+                              <FInput
+                                value={coopData.alternateFacility?.address || ''}
+                                onChange={(v) =>
+                                  updateCoopData(plan.id, (coop) => ({
+                                    ...coop,
+                                    alternateFacility: { ...(coop.alternateFacility || {}), address: v },
+                                  }))
+                                }
+                                placeholder="123 Continuity Way, City, ST"
+                              />
+                            </div>
+                            <div>
+                              <Label>Capacity</Label>
+                              <FInput
+                                value={coopData.alternateFacility?.capacity || ''}
+                                onChange={(v) =>
+                                  updateCoopData(plan.id, (coop) => ({
+                                    ...coop,
+                                    alternateFacility: { ...(coop.alternateFacility || {}), capacity: v },
+                                  }))
+                                }
+                                placeholder="40 staff"
+                              />
+                            </div>
+                            <div>
+                              <Label>Activation contact</Label>
+                              <FInput
+                                value={coopData.alternateFacility?.activationContact || ''}
+                                onChange={(v) =>
+                                  updateCoopData(plan.id, (coop) => ({
+                                    ...coop,
+                                    alternateFacility: { ...(coop.alternateFacility || {}), activationContact: v },
+                                  }))
+                                }
+                                placeholder="Facilities duty officer"
+                              />
+                            </div>
+                            <div>
+                              <Label>Tested status</Label>
+                              <FSel
+                                value={coopData.alternateFacility?.testedStatus || 'untested'}
+                                onChange={(v) =>
+                                  updateCoopData(plan.id, (coop) => ({
+                                    ...coop,
+                                    alternateFacility: { ...(coop.alternateFacility || {}), testedStatus: v },
+                                  }))
+                                }
+                              >
+                                <option value="untested">Untested</option>
+                                <option value="partially_tested">Partially tested</option>
+                                <option value="tested">Tested</option>
+                              </FSel>
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <Label>Available technology</Label>
+                            <FTextarea
+                              rows={2}
+                              value={coopData.alternateFacility?.technology || ''}
+                              onChange={(v) =>
+                                updateCoopData(plan.id, (coop) => ({
+                                  ...coop,
+                                  alternateFacility: { ...(coop.alternateFacility || {}), technology: v },
+                                }))
+                              }
+                              placeholder="Generator backup, redundant internet, radios, conference bridge, GIS workstation..."
+                            />
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <div>
+                              <Label>Last facility test date</Label>
+                              <FInput
+                                type="date"
+                                value={coopData.alternateFacility?.lastTestDate || ''}
+                                onChange={(v) =>
+                                  updateCoopData(plan.id, (coop) => ({
+                                    ...coop,
+                                    alternateFacility: { ...(coop.alternateFacility || {}), lastTestDate: v },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <Label>COOP exercise evidence date</Label>
+                              <FInput
+                                type="date"
+                                value={coopData.lastCoopExerciseDate || ''}
+                                onChange={(v) =>
+                                  updateCoopData(plan.id, (coop) => ({
+                                    ...coop,
+                                    lastCoopExerciseDate: v,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <Attachments
                       docs={plan.docs || []}
                       onAdd={(doc) =>
@@ -9096,6 +10390,335 @@ function PlanLibrary({ data, setData }) {
                         )
                       }
                     />
+                    <div
+                      style={{
+                        marginTop: 10,
+                        border: `1px solid ${B.border}`,
+                        borderRadius: 8,
+                        background: '#fff',
+                        padding: '12px 12px',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700, color: B.text, marginBottom: 6 }}>
+                        Plan collaboration (document-scoped)
+                      </div>
+                      <div style={{ fontSize: 11, color: B.faint, marginBottom: 10, lineHeight: 1.5 }}>
+                        Invite outside partners to <strong>this plan only</strong>. They submit comments or proposed updates, and the plan author reviews each request before it is accepted.
+                      </div>
+                      {!collabOpen && (
+                        <div
+                          style={{
+                            marginBottom: 10,
+                            fontSize: 11,
+                            color: B.amber,
+                            background: B.amberLight,
+                            border: `1px solid ${B.amberBorder}`,
+                            borderRadius: 6,
+                            padding: '8px 10px',
+                          }}
+                        >
+                          Collaboration intake is active while the plan is in Draft or Review Due status.
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr 170px auto',
+                          gap: 8,
+                          alignItems: 'end',
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div>
+                          <Label>Collaborator name</Label>
+                          <FInput
+                            value={getInviteDraft(plan.id).name || ''}
+                            onChange={(v) => setInviteField(plan.id, 'name', v)}
+                            placeholder="County public works lead"
+                          />
+                        </div>
+                        <div>
+                          <Label>Email</Label>
+                          <FInput
+                            value={getInviteDraft(plan.id).email || ''}
+                            onChange={(v) => setInviteField(plan.id, 'email', v)}
+                            placeholder="partner@agency.gov"
+                          />
+                        </div>
+                        <div>
+                          <Label>Permission</Label>
+                          <FSel
+                            value={getInviteDraft(plan.id).permission || 'comment_only'}
+                            onChange={(v) => setInviteField(plan.id, 'permission', v)}
+                          >
+                            <option value="comment_only">Comments only</option>
+                            <option value="propose_updates">Comments + updates</option>
+                          </FSel>
+                        </div>
+                        <Btn
+                          label="Invite"
+                          onClick={() => inviteCollaborator(plan)}
+                          disabled={!collabOpen || !String(getInviteDraft(plan.id).email || '').trim()}
+                          primary
+                        />
+                      </div>
+                      {(plan.collaborators || []).length > 0 && (
+                        <div style={{ marginBottom: 10 }}>
+                          {(plan.collaborators || []).map((c) => (
+                            <div
+                              key={c.id}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr auto auto auto',
+                                gap: 8,
+                                alignItems: 'center',
+                                fontSize: 11,
+                                border: `1px solid ${B.border}`,
+                                borderRadius: 6,
+                                padding: '7px 8px',
+                                marginBottom: 6,
+                                background: '#f8fafc',
+                              }}
+                            >
+                              <div>
+                                <div style={{ color: B.text, fontWeight: 600 }}>
+                                  {c.name || c.email}
+                                </div>
+                                <div style={{ color: B.faint }}>
+                                  {c.email} · {c.permission === 'propose_updates' ? 'Can propose updates' : 'Comments only'} · Scope: this plan only
+                                </div>
+                              </div>
+                              <Tag
+                                label={c.status === 'active' ? 'Active' : 'Paused'}
+                                color={c.status === 'active' ? B.green : B.amber}
+                                bg={c.status === 'active' ? B.greenLight : B.amberLight}
+                                border={c.status === 'active' ? B.greenBorder : B.amberBorder}
+                              />
+                              <Tag
+                                label={`Code ${c.inviteCode || 'N/A'}`}
+                                color={B.tealDark}
+                                bg={B.tealLight}
+                                border={B.tealBorder}
+                              />
+                              <button
+                                onClick={() =>
+                                  mutatePlan(plan.id, (target) => ({
+                                    ...target,
+                                    collaborators: (target.collaborators || []).map((x) =>
+                                      x.id === c.id
+                                        ? { ...x, status: x.status === 'active' ? 'paused' : 'active' }
+                                        : x
+                                    ),
+                                  }))
+                                }
+                                style={{
+                                  border: `1px solid ${B.border}`,
+                                  borderRadius: 6,
+                                  background: '#fff',
+                                  color: B.text,
+                                  fontSize: 11,
+                                  padding: '6px 8px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {c.status === 'active' ? 'Pause' : 'Activate'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(plan.collaborators || []).length > 0 && (
+                        <div
+                          style={{
+                            border: `1px solid ${B.border}`,
+                            borderRadius: 6,
+                            padding: '9px 9px',
+                            marginBottom: 10,
+                            background: '#fafcfc',
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: B.text, fontWeight: 700, marginBottom: 8 }}>
+                            Record collaborator comment / update request
+                          </div>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1.1fr 140px 1fr auto',
+                              gap: 8,
+                              marginBottom: 8,
+                              alignItems: 'end',
+                            }}
+                          >
+                            <div>
+                              <Label>Collaborator</Label>
+                              <FSel
+                                value={getRequestDraft(plan.id, plan).collaboratorId || ''}
+                                onChange={(v) => setRequestField(plan.id, 'collaboratorId', v)}
+                              >
+                                {(plan.collaborators || [])
+                                  .filter((c) => c.status === 'active')
+                                  .map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name || c.email}
+                                    </option>
+                                  ))}
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Request type</Label>
+                              <FSel
+                                value={getRequestDraft(plan.id, plan).kind || 'comment'}
+                                onChange={(v) => setRequestField(plan.id, 'kind', v)}
+                              >
+                                <option value="comment">Comment</option>
+                                <option value="update">Update proposal</option>
+                              </FSel>
+                            </div>
+                            <div>
+                              <Label>Section</Label>
+                              <FInput
+                                value={getRequestDraft(plan.id, plan).section || ''}
+                                onChange={(v) => setRequestField(plan.id, 'section', v)}
+                                placeholder="Annex B / ESF 8"
+                              />
+                            </div>
+                            <Btn
+                              label="Submit request"
+                              onClick={() => submitCollabRequest(plan)}
+                              disabled={
+                                !collabOpen ||
+                                !(plan.collaborators || []).some((c) => c.status === 'active') ||
+                                !String(getRequestDraft(plan.id, plan).summary || '').trim() ||
+                                (getRequestDraft(plan.id, plan).kind === 'update' &&
+                                  !String(getRequestDraft(plan.id, plan).proposedText || '').trim())
+                              }
+                              primary
+                            />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <Label>Comment / requested change</Label>
+                            <FTextarea
+                              rows={2}
+                              value={getRequestDraft(plan.id, plan).summary || ''}
+                              onChange={(v) => setRequestField(plan.id, 'summary', v)}
+                              placeholder="Describe the issue, question, or requested change."
+                            />
+                          </div>
+                          {getRequestDraft(plan.id, plan).kind === 'update' && (
+                            <div>
+                              <Label>Proposed replacement text</Label>
+                              <FTextarea
+                                rows={2}
+                                value={getRequestDraft(plan.id, plan).proposedText || ''}
+                                onChange={(v) => setRequestField(plan.id, 'proposedText', v)}
+                                placeholder="Paste suggested wording to be reviewed by the plan author."
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {(plan.collabRequests || []).length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, color: B.text, fontWeight: 700, marginBottom: 8 }}>
+                            Pending and recent collaboration requests
+                          </div>
+                          {(plan.collabRequests || []).slice(0, 8).map((r) => (
+                            <div
+                              key={r.id}
+                              style={{
+                                border: `1px solid ${B.border}`,
+                                borderRadius: 6,
+                                background: '#f8fafc',
+                                padding: '8px 9px',
+                                marginBottom: 6,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 8,
+                                  alignItems: 'center',
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <div style={{ fontSize: 11, fontWeight: 700, color: B.text }}>
+                                  {r.kind === 'update' ? 'Update proposal' : 'Comment'} from {r.collaboratorName}
+                                  {r.section ? ` · ${r.section}` : ''}
+                                </div>
+                                <Tag
+                                  label={
+                                    r.status === 'pending'
+                                      ? 'Pending author approval'
+                                      : r.status === 'approved'
+                                      ? 'Approved'
+                                      : 'Rejected'
+                                  }
+                                  color={
+                                    r.status === 'pending'
+                                      ? B.amber
+                                      : r.status === 'approved'
+                                      ? B.green
+                                      : B.red
+                                  }
+                                  bg={
+                                    r.status === 'pending'
+                                      ? B.amberLight
+                                      : r.status === 'approved'
+                                      ? B.greenLight
+                                      : B.redLight
+                                  }
+                                  border={
+                                    r.status === 'pending'
+                                      ? B.amberBorder
+                                      : r.status === 'approved'
+                                      ? B.greenBorder
+                                      : B.redBorder
+                                  }
+                                />
+                              </div>
+                              <div style={{ fontSize: 11, color: B.faint, marginBottom: 4, lineHeight: 1.45 }}>
+                                {r.summary}
+                              </div>
+                              {r.kind === 'update' && r.proposedText && (
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: B.text,
+                                    background: '#fff',
+                                    border: `1px solid ${B.border}`,
+                                    borderRadius: 5,
+                                    padding: '6px 7px',
+                                    marginBottom: 6,
+                                  }}
+                                >
+                                  {r.proposedText}
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                <div style={{ fontSize: 10, color: B.faint }}>
+                                  Submitted {timeAgo(r.createdAt) || fmtDate(new Date(r.createdAt).toISOString().split('T')[0])}
+                                  {r.decidedBy ? ` · ${r.status} by ${r.decidedBy}` : ''}
+                                </div>
+                                {r.status === 'pending' && (
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <Btn
+                                      label="Approve"
+                                      onClick={() => decideCollabRequest(plan, r.id, 'approved')}
+                                      primary
+                                    />
+                                    <Btn
+                                      label="Reject"
+                                      onClick={() => decideCollabRequest(plan, r.id, 'rejected')}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -19661,6 +21284,7 @@ function BulkIntake({ data, updateData }) {
     setProcessing(true);
     setResults([]);
     setDone(false);
+    const intakeUser = getCurrentUserIdentity();
     const processed = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -19770,9 +21394,12 @@ function BulkIntake({ data, updateData }) {
         processed.push(err_result);
       }
     }
-    // Apply all mappings to standards
+    // Apply mappings to standards and auto-ingest plan-like docs into Plan Library
+    let plansCreated = 0;
+    let plansUpdated = 0;
     updateData((prev) => {
       const stds = { ...prev.standards };
+      const plans = (prev.plans || []).map((p) => ensurePlanCollaborationDefaults(p));
       const priority = {
         compliant: 3,
         in_progress: 2,
@@ -19804,8 +21431,72 @@ function BulkIntake({ data, updateData }) {
             updatedAt: Date.now(),
           };
         });
+        const inferredType = inferPlanTypeFromIntake(
+          docResult.name,
+          docResult.docType,
+          docResult.mappings
+        );
+        if (!inferredType) return;
+        const normalizedName = stripFileExtension(docResult.name);
+        const newDocForPlan = {
+          id: uid(),
+          name: docResult.name,
+          size: docResult.size,
+          uploadedAt: Date.now(),
+          source: 'bulk_intake',
+          docType: docResult.docType || 'Document',
+          mappedStandards: (docResult.mappings || []).map((m) => m.stdId),
+        };
+        const existingIdx = plans.findIndex((p) => {
+          const sameType = p.type === inferredType;
+          const sameName =
+            stripFileExtension(p.name).toLowerCase() === normalizedName.toLowerCase();
+          return sameType && (sameName || p.name === docResult.name);
+        });
+        if (existingIdx >= 0) {
+          const target = ensurePlanCollaborationDefaults(plans[existingIdx]);
+          plans[existingIdx] = {
+            ...target,
+            docs: [...(target.docs || []), newDocForPlan],
+            lastReview: target.lastReview || today(),
+            owner: target.owner || prev.emName || intakeUser.name || '',
+            notes: target.notes
+              ? target.notes
+              : `Auto-created evidence link from bulk intake (${docResult.docType || 'Document'}).`,
+          };
+          plansUpdated += 1;
+        } else {
+          plans.push({
+            id: uid(),
+            name: normalizedName || `${inferredType} (${docResult.docType || 'Document'})`,
+            type: inferredType,
+            version: '1.0',
+            lastReview: today(),
+            nextReview: '',
+            owner: prev.emName || '',
+            status: 'draft',
+            docs: [newDocForPlan],
+            emapRef: PLAN_EMAP_REFS[inferredType] || '4.5',
+            addedAt: Date.now(),
+            requirePartnerSafeguard: planTypeRequiresPartnerSafeguard(inferredType),
+            partnerReviewDate: '',
+            partnerReviewParticipants: '',
+            partnerReviewAttested: false,
+            partnerReviewAck: '',
+            partnerExerciseDate: '',
+            partnerExerciseNotes: '',
+            signoffBy: '',
+            signoffDate: '',
+            signoffConfirmed: false,
+            collaborators: [],
+            collabRequests: [],
+            collabHistory: [],
+            notes: `Auto-created from bulk intake (${docResult.docType || 'Document'}).`,
+          });
+          plansCreated += 1;
+        }
       });
-      return { ...prev, standards: stds };
+      return { ...prev, standards: stds, plans };
     });
     addActivity(
       updateData,
@@ -19814,7 +21505,7 @@ function BulkIntake({ data, updateData }) {
       `Bulk intake: ${processed.length} documents analyzed, ${
         [...new Set(processed.flatMap((r) => r.mappings.map((m) => m.stdId)))]
           .length
-      } standards updated`
+      } standards updated${plansCreated || plansUpdated ? `, ${plansCreated} plans added, ${plansUpdated} plans linked` : ''}`
     );
     setCurrentFile(null);
     setProcessing(false);
@@ -20876,6 +22567,26 @@ function PackageBuilder({ data, setView }) {
       detail: coop ? `${coop.name} - current` : 'No COOP on file',
       fix: 'plans',
     });
+    const coopStructured = data.plans
+      ?.map((p) => ensurePlanAccreditationDefaults(p))
+      .find((p) => p.type === 'COOP' && p.status === 'current');
+    const coopReadiness = getCoopReadiness(coopStructured?.coopData);
+    c.push({
+      id: 'coop-structure',
+      label: 'COOP operational structure documented',
+      status:
+        !coopStructured
+          ? 'warn'
+          : coopReadiness >= 80
+          ? 'pass'
+          : coopReadiness >= 50
+          ? 'warn'
+          : 'fail',
+      detail: !coopStructured
+        ? 'Current COOP plan not available'
+        : `${coopReadiness}% complete (essential functions, succession, devolution, alternate facility, exercise evidence)`,
+      fix: 'plans',
+    });
     const hmp = data.plans?.find((p) => p.type === 'Hazard Mitigation Plan');
     c.push({
       id: 'hmp',
@@ -20925,6 +22636,46 @@ function PackageBuilder({ data, setView }) {
           ? `${tc} record${tc > 1 ? 's' : ''} - add more`
           : 'No training records',
       fix: 'training',
+    });
+    const governanceGaps = (data.plans || []).reduce(
+      (acc, plan) => acc + listMissingPlanGovernanceItems(ensurePlanAccreditationDefaults(plan)).length,
+      0
+    );
+    c.push({
+      id: 'plan_governance',
+      label: 'Plan governance controls complete',
+      status:
+        governanceGaps === 0
+          ? 'pass'
+          : governanceGaps <= 3
+          ? 'warn'
+          : 'fail',
+      detail:
+        governanceGaps === 0
+          ? 'Approval/review metadata complete across plans'
+          : `${governanceGaps} governance field gaps across plan records`,
+      fix: 'plans',
+    });
+    const coopPlans = (data.plans || [])
+      .map((p) => ensurePlanAccreditationDefaults(p))
+      .filter((p) => p.type === 'COOP');
+    const coopReady = coopPlans.filter((p) => getCoopReadiness(p.coopData) >= 80).length;
+    c.push({
+      id: 'coop_continuity',
+      label: 'COOP continuity controls structured',
+      status:
+        coopPlans.length === 0
+          ? 'warn'
+          : coopReady === coopPlans.length
+          ? 'pass'
+          : coopReady > 0
+          ? 'warn'
+          : 'fail',
+      detail:
+        coopPlans.length === 0
+          ? 'No COOP plans on file'
+          : `${coopReady}/${coopPlans.length} COOP plans have continuity controls at >=80%`,
+      fix: 'plans',
     });
     const am = (data.partners || []).filter(
       (p) => !p.expires || daysUntil(p.expires) > 0
@@ -21651,6 +23402,46 @@ function PackageBuilder({ data, setView }) {
                 val: `${data.training?.length || 0} records`,
                 ok: (data.training?.length || 0) >= 5,
                 mod: 'training',
+              },
+              {
+                icon: '-',
+                label: 'Plan Governance',
+                val: `${(data.plans || []).reduce(
+                  (a, p) =>
+                    a +
+                    listMissingPlanGovernanceItems(ensurePlanAccreditationDefaults(p))
+                      .length,
+                  0
+                )} gaps`,
+                ok:
+                  (data.plans || []).reduce(
+                    (a, p) =>
+                      a +
+                      listMissingPlanGovernanceItems(ensurePlanAccreditationDefaults(p))
+                        .length,
+                    0
+                  ) === 0,
+                mod: 'plans',
+              },
+              {
+                icon: '-',
+                label: 'COOP Continuity Controls',
+                val: `${(data.plans || [])
+                  .map((p) => ensurePlanAccreditationDefaults(p))
+                  .filter((p) => p.type === 'COOP')
+                  .filter((p) => getCoopReadiness(p.coopData) >= 80).length}/${
+                  (data.plans || []).filter((p) => p.type === 'COOP').length
+                } ready`,
+                ok: (() => {
+                  const coopPlans = (data.plans || [])
+                    .map((p) => ensurePlanAccreditationDefaults(p))
+                    .filter((p) => p.type === 'COOP');
+                  return (
+                    coopPlans.length > 0 &&
+                    coopPlans.every((p) => getCoopReadiness(p.coopData) >= 80)
+                  );
+                })(),
+                mod: 'plans',
               },
               {
                 icon: '-',
@@ -22927,6 +24718,30 @@ function EvidenceExportView({ data, orgName }) {
   const standards = data.standards || {};
   const [selectedSection, setSelectedSection] = useState(null);
   const [exporting, setExporting] = useState(null);
+  const trainingRoleRows = COOP_POSITION_KEYS.map((role) => {
+    const requiredCourses = COOP_REQUIRED_COURSES_BY_POSITION[role] || [];
+    const assigned = (data.employees || []).filter((emp) => {
+      const assignedRole = emp.coopRole || inferCoopRoleFromEmployee(emp);
+      return assignedRole === role;
+    });
+    const completion = requiredCourses.map((course) => {
+      const normalized = normalizeTrainingTypeName(course);
+      const holders = assigned.filter((emp) => {
+        const byTraining = collectEmployeeTrainingCoverage(emp.name, data.training).has(
+          normalized
+        );
+        const byCredential = (emp.credentials || []).some(
+          (c) => normalizeTrainingTypeName(c.type || c.name) === normalized
+        );
+        return byTraining || byCredential;
+      });
+      return { course, holders: holders.map((h) => h.name).filter(Boolean) };
+    });
+    return { role, assigned, completion };
+  });
+  const coopPlans = (data.plans || [])
+    .map((p) => ensurePlanAccreditationDefaults(p))
+    .filter((p) => p.type === 'COOP');
 
   const buildEvidencePackage = (stdId) => {
     const std = ALL_STANDARDS.find((s) => s.id === stdId);
@@ -22961,6 +24776,11 @@ function EvidenceExportView({ data, orgName }) {
               type: p.type,
               status: p.status,
               lastReview: p.lastReview,
+              approvedBy: p.approvedBy || p.signoffBy || '',
+              approvalDate: p.signoffDate || p.approvalDate || '',
+              reviewCycleMonths: getEffectivePlanReviewCycleMonths(p),
+              reviewDueStatus: computePlanReviewDueStatus(p).status,
+              governanceMissing: listMissingPlanGovernanceItems(ensurePlanAccreditationDefaults(p)),
             },
           ];
       });
@@ -22971,6 +24791,17 @@ function EvidenceExportView({ data, orgName }) {
           { person: t.person, type: t.type, date: t.date },
         ];
       });
+    if (section === '4.10') {
+      evidence.linkedData.trainingRoleMatrix = trainingRoleRows.map((row) => ({
+        role: row.role,
+        assigned: row.assigned.map((a) => a.name),
+        completion: row.completion.map((c) => ({
+          course: c.course,
+          met: c.holders.length > 0,
+          holders: c.holders,
+        })),
+      }));
+    }
     if (section === '4.11') {
       (data.exercises || []).forEach((e) => {
         evidence.linkedData.exercises = [
@@ -23015,6 +24846,29 @@ function EvidenceExportView({ data, orgName }) {
             { name: g.name, type: g.type, amount: g.amount },
           ];
         });
+    if (section === '4.4') {
+      evidence.linkedData.coopContinuity = coopPlans.map((p) => ({
+        plan: p.name,
+        readiness: getCoopReadiness(p.coopData),
+        essentialFunctions: (p.coopData?.essentialFunctions || []).length,
+        successionRoles: (p.coopData?.successionRoles || []).length,
+        devolutionTriggers: (p.coopData?.devolutionTriggers || []).length,
+        alternateFacilityAddress: p.coopData?.alternateFacility?.address || '',
+        lastCoopExerciseDate: p.coopData?.lastCoopExerciseDate || '',
+      }));
+    }
+    evidence.linkedData.packageCoverSheet = {
+      organization: orgName || data.orgName || '',
+      generatedOn: today(),
+      emapCompliance: `${overallStats(data.standards || {}).compliant}/${overallStats(data.standards || {}).total}`,
+      standardsWithEvidence: Object.values(data.standards || {}).filter(
+        (r) => (r.docs || []).length > 0 || String(r.notes || '').trim()
+      ).length,
+      rationaleStatements: Object.values(data.standards || {}).reduce(
+        (acc, r) => acc + (r.docs || []).filter((d) => String(d.rationale || '').trim()).length,
+        0
+      ),
+    };
     return evidence;
   };
 
@@ -23100,6 +24954,45 @@ function EvidenceExportView({ data, orgName }) {
           label="Export All Standards"
           onClick={() => ALL_SECTIONS.forEach((sec) => exportSection(sec))}
           primary
+          small
+        />
+        <Btn
+          label="Export EMAP Application Package"
+          onClick={() => {
+            const todayStamp = new Date().toISOString().split('T')[0];
+            const coverSheet = {
+              organization: orgName || '',
+              generatedAt: new Date().toISOString(),
+              standardsCompliant: overallStats(data.standards || {}).compliant,
+              standardsTotal: overallStats(data.standards || {}).total,
+              plansOnFile: (data.plans || []).length,
+              coopPlans: coopPlans.length,
+              coopContinuityReady: coopPlans.filter(
+                (p) => getCoopReadiness(p.coopData) >= 80
+              ).length,
+              exercisesWithAar: (data.exercises || []).filter((e) => e.aarFinal)
+                .length,
+            };
+            const packageBody = {
+              coverSheet,
+              standards: ALL_STANDARDS.map((std) => buildEvidencePackage(std.id)),
+              trainingRoleMatrix: trainingRoleRows,
+              coopContinuity: coopPlans.map((p) => ({
+                plan: p.name,
+                readiness: getCoopReadiness(p.coopData),
+                data: p.coopData,
+              })),
+            };
+            const blob = new Blob([JSON.stringify(packageBody, null, 2)], {
+              type: 'application/json',
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `emap_application_package_${todayStamp}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
           small
         />
       </div>
@@ -24274,29 +26167,32 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
   ];
 
   const features = [
-    ['EMAP Standards',     'All 73 standards tracked live. Every change, every evidence upload, every gap surfaced automatically. Not a checklist — a real-time picture of where your program stands.', 'Accreditation Core'],
-    ['SAGE Priority Queue','Stop asking what to work on next. SAGE already knows. Expiring MOUs, overdue AARs, lapsed credentials — ranked by urgency, surfaced every session.', 'AI Intelligence'],
-    ['Exercises & AARs',  'Every AAR finding gets an owner, a due date, and a direct link to the standard it reveals. The loop closes when the gap does — not when the report is filed.', 'HSEEP Aligned'],
-    ['Document Templates','SAGE writes the first draft pre-filled with your program data. COOP, strategic plan, comms plan. You edit. You approve. You move on.', 'AI-Powered'],
-    ['Evidence Export',   'One click and every standard has its bundle — docs, training records, AARs, rationale. Ready the moment the assessor email lands.', 'Accreditation-Ready'],
-    ['Grant-EMAP Tracker','Your grant report says training was completed. Your records say otherwise. This module keeps those two things from diverging — and flags when a gap might cost you funding.', 'EMAP 3.4'],
-    ['Recovery Planning', "Most programs file their recovery plan once. This module treats recovery as a living discipline — phases, owners, dependencies that change as your community does.", 'EMAP 4.5.4'],
-    ['Mutual Aid Mapping','You have MOUs. Do you know who covers what? The coverage matrix shows resource gaps before a real event asks the question for you.', 'EMAP 4.7'],
-    ['FEMA/NIMS Alignment','EMAP progress and FEMA alignment in one place. Give leadership the full picture, not one credential in isolation.', 'ICS/NIMS'],
+    ['Program Command Dashboard', 'Live operating picture across standards, plans, training, incidents, grants, and corrective actions so leadership sees risk and momentum in one place.', 'Executive Ops'],
+    ['THIRA & Risk Intelligence', 'Track hazards, probability, and consequences; tie risk data directly to planning priorities, exercises, and capability decisions.', 'Risk & Preparedness'],
+    ['Plan Library + Governance', 'Manage versions, approvers, review cycles, signatures, and review evidence so plans stay current and auditable — not shelfware.', 'Plan Control'],
+    ['Mission Continuity (COOP)', 'Structured continuity records for essential functions with RTOs, succession depth, devolution triggers, and alternate facility readiness.', 'Continuity'],
+    ['Personnel & Credentials', 'Maintain staff profiles, certifications, task books, status, and deployability with visibility into expiration risk and staffing gaps.', 'Workforce Readiness'],
+    ['Training Role Matrix', 'Map position requirements (for example ICS/NIMS by COOP role) to completed records and credentials with green/red compliance by role.', 'Role Compliance'],
+    ['Exercises, Incidents & AARs', 'Run HSEEP workflows, capture findings, assign corrective actions, and prove the full improvement loop from event to closure.', 'Operational Learning'],
+    ['Resource & Mutual Aid Mapping', 'Track resource inventories and partner coverage so you can spot capability shortfalls before an activation exposes them.', 'Resource Coordination'],
+    ['Grant & Deliverable Tracking', 'Connect funding work to program outcomes and compliance artifacts so reporting and operations stay aligned.', 'Program Sustainability'],
+    ['Collaboration, Security & Integrations', 'Document-scoped collaboration approvals, MFA/SSO controls, secure sharing, and webhook/calendar integration support.', 'Enterprise Controls'],
+    ['SAGE Priority Engine', 'SAGE monitors live program context and surfaces what matters now — overdue risks, expiring commitments, and next-best actions.', 'AI Program Partner'],
+    ['Evidence + Submission Packaging', 'Generate assessor-ready and leadership-ready exports with mapped evidence, rationale, continuity data, and operational history.', 'Reporting & Exports'],
   ];
 
   const pillars = [
-    ['Nothing Expires Quietly',
-     "Your EOP was last reviewed 18 months ago. Your alternate EOC hasn't been verified since the previous director. Your MOU partner changed their coordinator and nobody updated the file. SAGE notices before you have to.",
+    ['Silent Readiness Decay',
+     "Reviews slip, owners change, and agreements expire quietly. planrr keeps the full operating baseline visible so drift gets fixed before it becomes failure.",
      GOLD],
-    ['Your Succession Line Is Probably Wrong',
-     "Your succession line references two positions that no longer exist. If your EM director is unavailable today, who's in charge? planrr turns your COOP from a filed document into a maintained record with actual people and actual depth.",
+    ['Continuity Without Guesswork',
+     "Essential functions, succession depth, and devolution procedures are structured and searchable, not buried in disconnected documents.",
      B.teal],
-    ['The Finding That Never Closes',
-     "The comms gap showed up in three consecutive AARs. It's still open. planrr connects every finding to an owner, a standard, and a due date. The loop closes when the gap does.",
+    ['Closed-Loop Improvement',
+     "Every exercise and incident finding is tracked to ownership and closure. The system proves what changed, not just what was documented.",
      GOLD],
-    ['What To Work On Today',
-     "You have 73 standards, 14 open corrective actions, 3 MOUs expiring in 60 days, and a training record 16 months out of date. SAGE surfaces what needs attention today — not next quarter.",
+    ['Operational Focus Every Day',
+     "SAGE prioritizes what needs action now across modules so teams spend less time hunting status and more time reducing risk.",
      B.teal],
   ];
 
@@ -24308,15 +26204,15 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
   ];
   const socialProof = [
     ['County EM Pilot', '34% reduction in overdue actions'],
-    ['Municipal OES Pilot', '2.1x faster evidence prep'],
+    ['Municipal OES Pilot', '2.1x faster readiness reporting cycles'],
     ['Regional Coalition', '91% weekly task closure rate'],
   ];
 
   const sageScenarios = [
-    { n:'01', title:'Accreditation prep',       ask:'"Where do I actually stand on EMAP right now?"',       answer:"SAGE pulls your live status across all 73 standards, identifies the 8 blocking your peer review, cross-references your existing documents to surface which ones have evidence that just hasn't been uploaded yet, and gives you a prioritized action list ordered by effort-to-compliance ratio. Not a dashboard. A plan." },
-    { n:'02', title:'Grant deliverable crunch', ask:'"My EMPG closeout is in 3 weeks. What am I missing?"', answer:"SAGE reviews your active grant deliverables, cross-checks them against your training records, exercise logs, and personnel data, identifies the two deliverables with documentation gaps, and drafts the narrative sections you're missing — with your program data pre-filled." },
-    { n:'03', title:'Post-exercise AAR',        ask:'"Help me write the AAR for last Tuesday\'s tabletop."', answer:"SAGE pulls your exercise record and drafts a complete HSEEP-compliant AAR with findings, strengths, and improvement plan pre-structured. It tags each finding to the EMAP standard it reveals, creates corrective action items with owners and due dates, and flags which match gaps from previous exercises. The loop closes automatically." },
-    { n:'04', title:'Monday morning',           ask:"You don't ask anything. You just log in.",             answer:"SAGE has already reviewed everything that changed since Friday. It surfaces the MOU expiring in 18 days, the corrective action 30 days overdue, the training record that lapsed over the weekend, and the one standard you could mark compliant today with a 10-minute upload. No prompt required. It's already done the work." },
+    { n:'01', title:'Weekly readiness brief',   ask:'"What is most likely to break this week?"',             answer:"SAGE scans plan governance dates, continuity readiness, staffing/training coverage, open corrective actions, and expiring partner commitments to produce a risk-ranked action brief for the week." },
+    { n:'02', title:'Grant deliverable crunch', ask:'"My EMPG closeout is in 3 weeks. What am I missing?"', answer:"SAGE reviews active grant deliverables, cross-checks training/exercise/personnel evidence, and highlights missing artifacts with draft narrative support ready to edit." },
+    { n:'03', title:'COOP exercise follow-up',  ask:'"We finished a COOP drill. What should we update?"',   answer:"SAGE links the COOP exercise to continuity records, flags succession or facility gaps exposed in the drill, and generates corrective actions with owners and due dates." },
+    { n:'04', title:'Monday morning',           ask:"You don't ask anything. You just log in.",             answer:"SAGE has already reviewed what changed since Friday and surfaces the highest-impact priorities first — from expiring agreements to overdue corrective actions and readiness gaps you can close today." },
   ];
 
   const LP = {
@@ -24400,9 +26296,9 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
           <div style={{ marginTop: 20, maxWidth: 760 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
               {[
-                ['Problem', 'Critical actions buried in email and static docs.'],
-                ['Proof', 'Live queue + approvals + audit trail with EMAP context.'],
-                ['Outcome', 'Fewer surprises, faster assessor-ready evidence.'],
+                ['Problem', 'Critical actions buried across plans, training logs, AARs, and partner files.'],
+                ['Proof', 'One operating picture with continuity controls, approvals, ownership, and audit trail.'],
+                ['Outcome', 'Faster decisions, stronger continuity, and executive-ready reporting on demand.'],
               ].map(([t, d]) => (
                 <div key={t} style={{ background: 'rgba(20,20,20,0.88)', border: '1px solid rgba(255,255,255,0.08)', padding: '12px 14px' }}>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: GOLD, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{t}</div>
@@ -24416,7 +26312,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
               Product proof
             </div>
             <div style={{ fontSize: 13, color: '#C6D2DD', lineHeight: 1.65 }}>
-              Dashboard now includes team governance and security posture signals (member roles, pending approvals, MFA coverage) so leaders can assess readiness in seconds.
+              Cross-module dashboards now surface continuity readiness, workforce coverage, corrective action closure, collaboration approvals, and security posture in one view.
             </div>
           </div>
         </div>
@@ -24424,7 +26320,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
         {/* ── STATS ── */}
         <div style={{borderTop:'1px solid rgba(196,154,60,0.18)',borderBottom:'1px solid rgba(196,154,60,0.18)',background:'rgba(10,10,10,0.88)'}}>
           <div className="lp-stats" style={{maxWidth:1120,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>
-            {[['73','EMAP Standards','Tracked'],['32','FEMA Core','Capabilities'],['100%','End-to-End','EM System'],['SAGE','Your AI','Program Partner']].map(([n,l1,l2],i)=>(
+            {[['12','Operational Modules','Connected'],['73','EMAP Standards','Embedded'],['365','Readiness Cycle','Always On'],['SAGE','Your AI','Program Partner']].map(([n,l1,l2],i)=>(
               <div key={l1} style={{padding:'28px clamp(18px,3vw,44px)',borderRight:i<3?'1px solid rgba(196,154,60,0.1)':'none'}}>
                 <div style={{fontFamily:"'Syne','DM Sans',sans-serif",fontSize:n==='SAGE'?28:40,fontWeight:800,color:GOLD,lineHeight:1,marginBottom:8,letterSpacing:n==='SAGE'?'-0.5px':'-1.5px'}}>{n}</div>
                 <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:'#475569',letterSpacing:'0.13em',textTransform:'uppercase',lineHeight:1.7}}>{l1}<br/>{l2}</div>
@@ -24445,7 +26341,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                 ))}
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {['EMAP EMS 5-2022 aligned', 'Role-based approvals', 'MFA + SSO policy-ready', 'Share links with expiry/revocation'].map((x) => (
+                {['Incident + exercise closed loop', 'COOP continuity controls', 'Role-based approvals + audit trail', 'MFA + secure external sharing'].map((x) => (
                   <span key={x} style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:B.teal, border:'1px solid rgba(62,207,207,0.22)', background:'rgba(62,207,207,0.08)', padding:'3px 8px' }}>
                     {x}
                   </span>
@@ -24802,7 +26698,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                   </div>
                   <span style={{fontFamily:"'Oxanium','DM Sans',sans-serif",fontWeight:800,fontSize:16,color:'#FFFFFF'}}>planrr<span style={{color:GOLD}}>.app</span></span>
                 </div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:'#475569',letterSpacing:'0.08em',lineHeight:1.8,maxWidth:280}}>Emergency management platform.<br/>EMAP EMS 5-2022 · HSEEP · CPG 201<br/>helloplanrr.app@gmail.com</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:'#475569',letterSpacing:'0.08em',lineHeight:1.8,maxWidth:280}}>Emergency management operating system.<br/>Operations · Continuity · Readiness · Reporting<br/>helloplanrr.app@gmail.com</div>
               </div>
               <div style={{display:'flex',gap:48,flexWrap:'wrap'}}>
                 <div>
