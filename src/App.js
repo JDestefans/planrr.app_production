@@ -1209,6 +1209,9 @@ function enqueueAnalyticsEvent(event) {
     const current = JSON.parse(localStorage.getItem(ANALYTICS_STORE_KEY) || '[]');
     const next = [event, ...(Array.isArray(current) ? current : [])].slice(0, 500);
     localStorage.setItem(ANALYTICS_STORE_KEY, JSON.stringify(next));
+    if (typeof window !== 'undefined') {
+      window.planrrEvents = next;
+    }
   } catch {}
 }
 function trackEvent(name, props = {}) {
@@ -18183,6 +18186,12 @@ function SettingsView({ data, updateData }) {
     { id: 'export', label: 'Export Preview' },
     { id: 'system', label: 'System' },
   ];
+  const securityImplementationStatus =
+    'Policy controls are active in-app. Full IdP-backed SSO/SAML challenge enforcement should be configured through your production identity provider and backend auth policy.';
+  const integrationImplementationStatus =
+    'Connectors are configured in-app with local validation and manual sync triggers. Production webhook delivery and provider API synchronization should be enabled in deployment.';
+  const sharingImplementationStatus =
+    'Secure share links are currently managed in this browser-local token store. Production rollout should use server-side token storage and cryptographic passcode hashing.';
 
   // Live PDF preview data
   const previewAccent = brand.accentColor || B.teal;
@@ -18632,6 +18641,9 @@ function SettingsView({ data, updateData }) {
             <div style={{ background: '#fafcfc', border: `1px solid ${B.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 12, color: B.muted }}>
               Security posture: {security.ssoEnabled ? 'SSO enabled' : 'Password auth'} · {security.enforceMfa ? 'MFA enforced' : 'MFA optional'}
             </div>
+            <div style={{ marginTop: 8, fontSize: 11, color: B.faint, lineHeight: 1.6 }}>
+              Implementation status: {securityImplementationStatus}
+            </div>
           </Card>
         </div>
       )}
@@ -18727,6 +18739,9 @@ function SettingsView({ data, updateData }) {
                 {syncMessage}
               </div>
             )}
+            <div style={{ marginTop: 8, fontSize: 11, color: B.faint, lineHeight: 1.6 }}>
+              Implementation status: {integrationImplementationStatus}
+            </div>
           </Card>
         </div>
       )}
@@ -19660,6 +19675,9 @@ function SettingsView({ data, updateData }) {
                   ))}
                 </div>
               )}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 11, color: B.faint, lineHeight: 1.6 }}>
+              Implementation status: {sharingImplementationStatus}
             </div>
             {/* Starter Packs */}
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${B.border}` }}>
@@ -26135,6 +26153,21 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
   const scrollTo = useCallback((ref) => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
+  const fireTrialCta = useCallback(
+    (placement, plan = 'small_team') => {
+      trackEvent('landing_cta_clicked', { placement, plan });
+      if (onBuyPlan) onBuyPlan(plan);
+      else onSignup?.();
+    },
+    [onBuyPlan, onSignup]
+  );
+  const fireLoginCta = useCallback(
+    (placement) => {
+      trackEvent('landing_login_clicked', { placement });
+      onLogin?.();
+    },
+    [onLogin]
+  );
 
   useEffect(() => {
     const onScroll = () => {
@@ -26296,10 +26329,10 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                 onMouseEnter={e=>e.currentTarget.style.color=GOLD} onMouseLeave={e=>e.currentTarget.style.color='#64748B'}>{label}</button>
             ))}
             <div style={{width:1,height:20,background:'rgba(255,255,255,0.08)',margin:'0 10px'}}/>
-            <button onClick={onLogin} style={{background:'none',color:'#94A3B8',border:'1px solid rgba(255,255,255,0.1)',borderRadius:4,padding:'8px 18px',fontSize:13,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}
+            <button onClick={() => fireLoginCta('nav')} style={{background:'none',color:'#94A3B8',border:'1px solid rgba(255,255,255,0.1)',borderRadius:4,padding:'8px 18px',fontSize:13,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(196,154,60,0.4)';e.currentTarget.style.color='#F0F4FA';}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.1)';e.currentTarget.style.color='#94A3B8';}}>Sign In</button>
-            <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
+            <button onClick={() => fireTrialCta('nav_primary')} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
           </div>
         </nav>
 
@@ -26321,8 +26354,8 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
             </div>
           </div>
           <div className="lp-hero-btns" style={{display:'flex',gap:14,flexWrap:'wrap'}}>
-            <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
-            <button onClick={onLogin} style={LP.ctaGhost}>Sign In to Your Program →</button>
+            <button onClick={() => fireTrialCta('hero_primary')} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
+            <button onClick={() => fireLoginCta('hero_secondary')} style={LP.ctaGhost}>Sign In to Your Program →</button>
           </div>
           <div style={{ marginTop: 20, maxWidth: 760 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
@@ -26626,8 +26659,8 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                 </div>
                 <p style={{fontSize:14,...LP.body,lineHeight:1.75,marginBottom:30}}>SAGE exists because emergency managers are running complex programs with limited staff and no system watching the gaps. It's not a feature. It's the reason planrr.app works the way it does.</p>
                 <div style={{display:'flex',gap:14,justifyContent:'center',flexWrap:'wrap'}}>
-                  <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
-                  <button onClick={onLogin} style={LP.ctaGhost}>Sign In →</button>
+                  <button onClick={() => fireTrialCta('sage_cta')} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
+                  <button onClick={() => fireLoginCta('sage_secondary')} style={LP.ctaGhost}>Sign In →</button>
                 </div>
               </div>
             </div>
@@ -26656,7 +26689,14 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                       <span style={{color:featured?GOLD:B.teal,flexShrink:0,marginTop:1,fontSize:11}}>+</span>{f}
                     </div>
                   ))}
-                  <button onClick={()=>plan==='enterprise'?onSignup?.():onBuyPlan?onBuyPlan(plan):onSignup?.()}
+                  <button onClick={()=>{
+                    if (plan === 'enterprise') {
+                      trackEvent('landing_enterprise_contact_clicked', { placement: 'pricing_card_enterprise' });
+                      onSignup?.();
+                      return;
+                    }
+                    fireTrialCta(`pricing_${plan}`, plan);
+                  }}
                     style={{width:'100%',marginTop:20,background:featured?GOLD:'transparent',color:featured?'#111':plan==='enterprise'?'#8B5CF6':B.teal,border:featured?'none':`1px solid ${plan==='enterprise'?'rgba(139,92,246,0.3)':'rgba(62,207,207,0.3)'}`,padding:featured?'12px':'11px 20px',fontFamily:featured?"'Syne','DM Sans',sans-serif":"'DM Sans',sans-serif",fontSize:featured?13:12,fontWeight:700,cursor:'pointer',borderRadius:3}}
                   >{plan==='enterprise'?'Contact Sales':'Start Free Trial'}</button>
                 </div>
@@ -26673,8 +26713,8 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
         </div>
 
         <div className="lp-mobile-sticky-cta">
-          <button onClick={() => onBuyPlan ? onBuyPlan('small_team') : onSignup?.()} style={{ ...LP.ctaPrimary, padding: '10px 12px', fontSize: 11 }}>Start Free Trial</button>
-          <button onClick={onLogin} style={{ ...LP.ctaGhost, padding: '10px 12px', fontSize: 10 }}>Sign In</button>
+          <button onClick={() => fireTrialCta('sticky_mobile')} style={{ ...LP.ctaPrimary, padding: '10px 12px', fontSize: 11 }}>Start Free Trial</button>
+          <button onClick={() => fireLoginCta('sticky_mobile')} style={{ ...LP.ctaGhost, padding: '10px 12px', fontSize: 10 }}>Sign In</button>
         </div>
 
         {/* ── BIG CTA ── */}
@@ -26687,8 +26727,8 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
           <h2 style={{...LP.headline,fontSize:'clamp(30px,4.5vw,56px)',marginBottom:16}}>Adapt or don't.<br/><span style={{color:GOLD}}>The incident won't wait.</span></h2>
           <p style={{...LP.body,fontSize:15,marginBottom:40,maxWidth:520,margin:'0 auto 40px',lineHeight:1.82}}>Organizations that learn, adapt, and build institutional resilience don't need the plan to be perfect. They need the people, the systems, and the muscle memory to respond when it isn't.</p>
           <div style={{display:'flex',gap:14,justifyContent:'center',flexWrap:'wrap'}}>
-            <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
-            <button onClick={onLogin} style={LP.ctaGhost}>Sign In →</button>
+            <button onClick={() => fireTrialCta('bottom_cta')} style={LP.ctaPrimary} onMouseEnter={hP} onMouseLeave={lP}>Start Free Trial</button>
+            <button onClick={() => fireLoginCta('bottom_cta')} style={LP.ctaGhost}>Sign In →</button>
           </div>
           <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:'#475569',letterSpacing:'0.1em',marginTop:20}}>Founding agency pricing · Locked for life · Direct input into the roadmap</div>
         </div>
@@ -26706,7 +26746,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
                 ['Authenticated Access','Every API call requires a valid token. Org-scoped — no other agency sees your data.'],
                 ['Activity Logs','Who changed what, and when. Full audit trail for accountability.'],
                 ['Automated Backups',"Continuous backups with point-in-time recovery. Your program doesn't disappear."],
-                ['Secure Infrastructure','SOC 2-certified cloud. DDoS protection, 24/7 monitoring, network isolation.'],
+                ['Secure Infrastructure','SOC 2 Type II program in progress. DDoS protection, 24/7 monitoring, and network isolation controls.'],
               ].map(([title,body])=>(
                 <div key={title} style={LP.darkCard} onMouseEnter={hC} onMouseLeave={lC}>
                   <div style={LP.accentTeal}/>
@@ -26761,8 +26801,8 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
         {mobileCtaVisible && (
           <div className="lp-mobile-only" style={{ position:'fixed', left:0, right:0, bottom:0, zIndex:60, padding:'10px 12px', background:'rgba(8,8,8,0.95)', borderTop:'1px solid rgba(196,154,60,0.2)' }}>
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={()=>onBuyPlan?onBuyPlan('small_team'):onSignup?.()} style={{ ...LP.ctaPrimary, flex:1, padding:'11px 12px', fontSize:12 }}>Start Free Trial</button>
-              <button onClick={onLogin} style={{ ...LP.ctaGhost, flex:1, padding:'10px 12px', fontSize:10 }}>Sign In</button>
+              <button onClick={() => fireTrialCta('mobile_footer_sticky')} style={{ ...LP.ctaPrimary, flex:1, padding:'11px 12px', fontSize:12 }}>Start Free Trial</button>
+              <button onClick={() => fireLoginCta('mobile_footer_sticky')} style={{ ...LP.ctaGhost, flex:1, padding:'10px 12px', fontSize:10 }}>Sign In</button>
             </div>
           </div>
         )}
@@ -27046,6 +27086,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
   async function doLogin(e) {
     e.preventDefault(); setErr(''); setLoading(true);
     try {
+      trackEvent('auth_login_submitted', { ssoEnabled, enforceMfa });
       if (ssoEnabled && ssoDomain) {
         const domain = String(email || '').split('@')[1] || '';
         if (domain.toLowerCase() !== String(ssoDomain).toLowerCase()) {
@@ -27064,6 +27105,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
   }
   async function doSignup(e) {
     e.preventDefault(); setErr('');
+    trackEvent('auth_signup_submitted', { hasName: !!String(name || '').trim() });
     if (pass !== pass2) { setErr('Passwords do not match'); return; }
     if (pass.length < 8) { setErr('Password must be at least 8 characters'); return; }
     if (!org.trim()) { setErr('Organization name is required'); return; }
@@ -27095,6 +27137,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
   }
   async function doReset(e) {
     e.preventDefault(); setErr(''); setLoading(true);
+    trackEvent('auth_reset_requested');
     try { await sbReset(email); setOk('Reset link sent — check your inbox.'); }
     catch (x) { setErr(x.message); }
     setLoading(false);
@@ -27206,12 +27249,12 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
                 </div>
               )}
               <div style={{ textAlign: 'center', marginBottom: 8 }}>
-                <button type="button" style={linkStyle} onClick={() => { setMode('reset'); setErr(''); setOk(''); }}>Forgot password?</button>
+                <button type="button" style={linkStyle} onClick={() => { trackEvent('auth_forgot_password_clicked'); setMode('reset'); setErr(''); setOk(''); }}>Forgot password?</button>
               </div>
               <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '14px 0' }} />
               <div style={{ fontSize: 12, color: '#64748B', textAlign: 'center' }}>
                 No account?{' '}
-                <button type="button" style={linkStyle} onClick={() => { setMode('signup'); setErr(''); setOk(''); }}>Request access</button>
+                <button type="button" style={linkStyle} onClick={() => { trackEvent('auth_request_access_clicked'); setMode('signup'); setErr(''); setOk(''); }}>Request access</button>
               </div>
             </form>
           )}
@@ -27237,7 +27280,7 @@ function AuthScreen({ onAuth, initialMode, onClose }) {
               </button>
               <div style={{ fontSize: 12, color: '#64748B', textAlign: 'center' }}>
                 Have an account?{' '}
-                <button type="button" style={linkStyle} onClick={() => { setMode('login'); setErr(''); setOk(''); }}>Sign in</button>
+                <button type="button" style={linkStyle} onClick={() => { trackEvent('auth_switch_to_login_clicked'); setMode('login'); setErr(''); setOk(''); }}>Sign in</button>
               </div>
             </form>
           )}
@@ -28654,8 +28697,10 @@ function AppInner() {
                     const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
                     const email = s?.user?.email || s?.email || '';
                     const url = email ? `${link}?prefilled_email=${encodeURIComponent(email)}` : link;
+                    trackEvent('checkout_redirect', { source: 'signup_pending_plan', plan: pendingPlan });
                     window.location.href = url;
                   } catch {
+                    trackEvent('checkout_redirect', { source: 'signup_pending_plan', plan: pendingPlan });
                     window.location.href = link;
                   }
                   return;
@@ -28737,6 +28782,7 @@ function AppInner() {
                 <button key={p.plan} onClick={() => {
                   const link = STRIPE_BUY_LINKS[p.plan];
                   if (link) {
+                    trackEvent('paywall_plan_selected', { plan: p.plan, source: subStatus === 'expired' ? 'expired' : 'trial_gate' });
                     try {
                       const s = JSON.parse(localStorage.getItem('sb_session') || '{}');
                       const email = s?.user?.email || s?.email || '';
