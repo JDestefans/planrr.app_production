@@ -26148,6 +26148,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
   const sectionPillars  = useRef(null);
   const sectionSage     = useRef(null);
   const sectionPricing  = useRef(null);
+  const sectionRoadmap  = useRef(null);
   const sectionSecurity = useRef(null);
 
   const scrollTo = useCallback((ref) => {
@@ -26227,6 +26228,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
     ['Pillars',  sectionPillars],
     ['SAGE',     sectionSage],
     ['Pricing',  sectionPricing],
+    ['Roadmap',  sectionRoadmap],
     ['Security', sectionSecurity],
   ];
 
@@ -26270,6 +26272,41 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
     ['County EM Pilot', '34% reduction in overdue actions'],
     ['Municipal OES Pilot', '2.1x faster readiness reporting cycles'],
     ['Regional Coalition', '91% weekly task closure rate'],
+  ];
+  const roadmapPhases = [
+    {
+      phase: 'Soft Launch',
+      timing: 'First 30 days',
+      objective: 'Stabilize onboarding and remove friction for early adopters.',
+      milestones: [
+        'White-glove agency onboarding and document intake completion tracking',
+        'Usage telemetry review for signup, activation, and first-week retention',
+        'Rapid UX fixes for navigation, setup, and first-report generation',
+      ],
+      outcome: 'Every new account reaches operational value in the first week.',
+    },
+    {
+      phase: 'Hard Launch',
+      timing: 'Days 31-90',
+      objective: 'Scale go-to-market with stronger trust signals and admin controls.',
+      milestones: [
+        'Published customer proof package with role-based use case walkthroughs',
+        'Expanded team admin workflows for permissions and collaboration governance',
+        'Integration readiness pushes for enterprise security and alerting pathways',
+      ],
+      outcome: 'Faster procurement confidence and smoother multi-user rollout.',
+    },
+    {
+      phase: 'Post-Launch Expansion',
+      timing: 'Quarter 2+',
+      objective: 'Deepen platform depth for continuity, operations, and executive visibility.',
+      milestones: [
+        'Advanced COOP readiness intelligence with deeper scenario tracking',
+        'Cross-jurisdiction collaboration and evidence exchange improvements',
+        'Executive forecast views for compliance risk, staffing exposure, and deadlines',
+      ],
+      outcome: 'planrr becomes the default command layer for daily EM operations.',
+    },
   ];
 
   const sageScenarios = [
@@ -26712,6 +26749,39 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
           </div>
         </div>
 
+        {/* ── ROADMAP ── */}
+        <div ref={sectionRoadmap} style={{ borderTop:'1px solid rgba(62,207,207,0.14)', borderBottom:'1px solid rgba(62,207,207,0.14)', background:'rgba(10,14,14,0.88)' }}>
+          <div style={LP.section}>
+            <div style={LP.lbl}><span style={{...LP.lblLine,background:B.teal}}/><span style={{...LP.mono,color:B.teal}}>What is next</span></div>
+            <h2 style={{...LP.headline,fontSize:'clamp(24px,3vw,40px)',marginBottom:14}}>Roadmap after launch.<br/><span style={{color:GOLD}}>Built with agency feedback.</span></h2>
+            <p style={{...LP.body,fontSize:15,maxWidth:640,lineHeight:1.82,marginBottom:44}}>
+              We are executing in phases so teams can deploy now while we continue shipping depth where emergency programs need it most.
+            </p>
+            <div className="lp-3col" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:3 }}>
+              {roadmapPhases.map(({ phase, timing, objective, milestones, outcome }) => (
+                <div key={phase} style={{ background:'#141414', border:'1px solid rgba(255,255,255,0.08)', borderLeft:`3px solid ${B.teal}`, padding:'22px 20px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:12 }}>
+                    <div style={{ fontFamily:"'Syne','DM Sans',sans-serif", fontSize:16, fontWeight:700, color:'#FFFFFF' }}>{phase}</div>
+                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:GOLD, letterSpacing:'0.1em', textTransform:'uppercase' }}>{timing}</div>
+                  </div>
+                  <div style={{ fontSize:13, color:'#C6D2DD', lineHeight:1.68, marginBottom:12 }}>{objective}</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
+                    {milestones.map((item) => (
+                      <div key={item} style={{ display:'flex', gap:8, alignItems:'flex-start', fontSize:12, color:'#A0AEBF', lineHeight:1.62 }}>
+                        <span style={{ color:B.teal, marginTop:1, fontWeight:700, fontSize:11 }}>+</span>
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:12, color:'#E2B96A', lineHeight:1.62, borderTop:'1px solid rgba(196,154,60,0.18)', paddingTop:10 }}>
+                    Outcome: {outcome}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="lp-mobile-sticky-cta">
           <button onClick={() => fireTrialCta('sticky_mobile')} style={{ ...LP.ctaPrimary, padding: '10px 12px', fontSize: 11 }}>Start Free Trial</button>
           <button onClick={() => fireLoginCta('sticky_mobile')} style={{ ...LP.ctaGhost, padding: '10px 12px', fontSize: 10 }}>Sign In</button>
@@ -26774,7 +26844,7 @@ function LandingPage({ onLogin, onSignup, onBuyPlan }) {
               <div style={{display:'flex',gap:48,flexWrap:'wrap'}}>
                 <div>
                   <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:GOLD,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:14}}>Product</div>
-                  {[['Platform',()=>scrollTo(sectionPlatform)],['SAGE',()=>scrollTo(sectionSage)],['Pricing',()=>scrollTo(sectionPricing)],['Security',()=>scrollTo(sectionSecurity)]].map(([l,fn])=>(
+                  {[['Platform',()=>scrollTo(sectionPlatform)],['SAGE',()=>scrollTo(sectionSage)],['Pricing',()=>scrollTo(sectionPricing)],['Roadmap',()=>scrollTo(sectionRoadmap)],['Security',()=>scrollTo(sectionSecurity)]].map(([l,fn])=>(
                     <div key={l} style={{marginBottom:8}}>
                       <button onClick={fn} style={{background:'none',border:'none',fontSize:13,color:'#475569',cursor:'pointer',fontFamily:"'DM Sans',sans-serif",padding:0}}
                         onMouseEnter={e=>e.currentTarget.style.color='#94A3B8'} onMouseLeave={e=>e.currentTarget.style.color='#475569'}>{l}</button>
