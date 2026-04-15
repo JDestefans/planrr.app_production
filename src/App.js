@@ -1192,6 +1192,7 @@ const fmtSize = (b) =>
     ? (b / 1024).toFixed(1) + 'KB'
     : (b / 1048576).toFixed(1) + 'MB';
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+const ANALYTICS_STORE_KEY = 'planrr_analytics_events_v1';
 const today = () => new Date().toISOString().split('T')[0];
 const fmtDate = (d) =>
   d
@@ -1203,6 +1204,36 @@ const fmtDate = (d) =>
     : '-';
 const daysUntil = (d) =>
   d ? Math.ceil((new Date(d + 'T00:00:00') - new Date()) / 86400000) : null;
+function enqueueAnalyticsEvent(event) {
+  try {
+    const current = JSON.parse(localStorage.getItem(ANALYTICS_STORE_KEY) || '[]');
+    const next = [event, ...(Array.isArray(current) ? current : [])].slice(0, 500);
+    localStorage.setItem(ANALYTICS_STORE_KEY, JSON.stringify(next));
+  } catch {}
+}
+function trackEvent(name, props = {}) {
+  if (!name) return;
+  const event = {
+    id: uid(),
+    name,
+    props,
+    ts: Date.now(),
+    path: typeof window !== 'undefined' ? window.location.pathname : '',
+  };
+  enqueueAnalyticsEvent(event);
+  try {
+    if (typeof window === 'undefined') return;
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', name, props || {});
+    }
+    if (typeof window.plausible === 'function') {
+      window.plausible(name, { props: props || {} });
+    }
+    if (window.posthog && typeof window.posthog.capture === 'function') {
+      window.posthog.capture(name, props || {});
+    }
+  } catch {}
+}
 function decodeJwtPayload(token) {
   try {
     if (!token || typeof token !== 'string') return null;
