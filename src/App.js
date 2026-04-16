@@ -2154,7 +2154,7 @@ function buildNotifications(data) {
       const c = ensureCapImprovementDefaults(raw);
       const imp = c.improvement || {};
       const reviewDays = daysUntil(imp.controlCheckDate);
-      if (imp.phase === 'control' && imp.controlCheckDate && reviewDays !== null && reviewDays < 14) {
+      if (imp.phase === 'control' && imp.controlCheckDate && reviewDays !== null && reviewDays < 60) {
         n.push({
           id: 'cap-control-' + c.id,
           urgency: reviewDays < 0 ? 'overdue' : reviewDays < 3 ? 'urgent' : 'soon',
